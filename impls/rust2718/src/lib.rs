@@ -12,6 +12,7 @@ use std::{
 pub enum MalErr {
     ReadErr(Cow<'static, str>),
     ArgErr(Cow<'static, str>),
+    ExecErr(Cow<'static, str>),
 }
 
 impl Display for MalErr {

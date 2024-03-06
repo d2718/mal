@@ -1,6 +1,8 @@
 /*!
 Types.
 */
+mod lambda;
+
 use std::{
     collections::BTreeMap,
     fmt::{Debug, Display, Formatter, Write},

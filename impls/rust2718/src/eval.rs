@@ -4,9 +4,6 @@ use ordered_float::OrderedFloat;
 
 use crate::{types::Val, MalErr};
 
-pub trait Lambda {}
-impl<F> Lambda for F where F: Fn(&[Val]) -> Result<Val, MalErr> + Sync {}
-
 pub type Env = HashMap<String, Box<&'static dyn Lambda>>;
 
 fn add(args: &[Val]) -> Result<Val, MalErr> {
@@ -107,5 +104,10 @@ pub fn default_env() -> Env {
 }
 
 pub fn eval_ast(ast: Val, envt: &Env) -> Result<Val, MalErr> {
+    match ast {
+        Val::Symbol(ref s) -> 
+    }
+
+    
     todo!()
 }
