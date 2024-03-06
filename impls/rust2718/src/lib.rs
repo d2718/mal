@@ -1,3 +1,4 @@
+pub mod eval;
 pub mod printer;
 pub mod reader;
 pub mod types;
@@ -10,6 +11,7 @@ use std::{
 #[derive(Debug)]
 pub enum MalErr {
     ReadErr(Cow<'static, str>),
+    ArgErr(Cow<'static, str>),
 }
 
 impl Display for MalErr {
