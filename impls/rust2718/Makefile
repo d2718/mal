@@ -8,6 +8,10 @@ step1_read_print: Cargo.toml src/lib.rs src/printer.rs src/reader.rs src/types.r
 	cargo build --bin step1_read_print
 	cp target/debug/step1_read_print ./
 	
+step2_eval: Cargo.toml src/* src/bin/step2_eval.rs
+	cargo build --bin step2_eval
+	cp target/debug/step2_eval ./
+	
 tidy:
 	rm step[0-9]_*
 	

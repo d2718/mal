@@ -4,6 +4,7 @@ use once_cell::sync::Lazy;
 use ordered_float::OrderedFloat;
 use regex::bytes;
 use regex::Regex;
+use tracing::{event, instrument, Level};
 
 use crate::{types::Val, MalErr};
 
@@ -14,12 +15,14 @@ static TOKENIZER: Lazy<Regex> = Lazy::new(|| {
 static ESCAPIZER: Lazy<bytes::Regex> =
     Lazy::new(|| bytes::Regex::new(r#"\\""#).expect("unable to initialize escaping regex"));
 
+#[derive(Debug)]
 pub struct Reader {
     pos: usize,
     tokens: Vec<String>,
 }
 
 impl Reader {
+    #[instrument]
     pub fn tokenize(text: &str) -> Reader {
         let tokens: Vec<String> = TOKENIZER
             .captures_iter(text)
@@ -30,6 +33,7 @@ impl Reader {
             })
             .collect();
 
+        event!(Level::DEBUG, "tokens: {:?}", &tokens);
         Reader { pos: 0, tokens }
     }
 
@@ -45,11 +49,13 @@ impl Reader {
         tok
     }
 
+    #[instrument]
     pub fn read_form(&mut self) -> Result<Option<Val>, MalErr> {
         let tok = match self.next() {
             Some(tok) => tok,
             None => return Ok(None),
         };
+        event!(Level::DEBUG, "next token: {}", &tok);
 
         let val = match tok.as_str() {
             "(" => Val::List(self.read_until(")")?),

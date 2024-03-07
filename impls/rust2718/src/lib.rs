@@ -22,3 +22,30 @@ impl Display for MalErr {
 }
 
 impl std::error::Error for MalErr {}
+
+#[cfg(test)]
+pub mod test {
+    use std::sync::RwLock;
+
+    static LOGGING_STARTED: RwLock<bool> = RwLock::new(false);
+
+    pub fn start_logging() {
+        use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
+        if *LOGGING_STARTED.read().unwrap() {
+            return;
+        }
+
+        let mut has_started = LOGGING_STARTED.write().unwrap();
+        if *has_started {
+            return;
+        }
+
+        tracing_subscriber::registry()
+            .with(fmt::layer())
+            .with(EnvFilter::from_env("LOG"))
+            .init();
+
+        *has_started = true;
+    }
+}
