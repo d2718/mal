@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use once_cell::sync::Lazy;
 use ordered_float::OrderedFloat;
@@ -6,7 +6,10 @@ use regex::bytes;
 use regex::Regex;
 use tracing::{event, instrument, Level};
 
-use crate::{types::Val, MalErr};
+use crate::{
+    types::{TreeMap, Val, Value},
+    MalErr, Res,
+};
 
 static TOKENIZER: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"[\s,]*(~@|[\[\]{}()'`~^@]|"(?:\.|[^\"])*"?|;.*|[^\s\[\]{}('",;)]*)"#)
@@ -50,7 +53,7 @@ impl Reader {
     }
 
     #[instrument]
-    pub fn read_form(&mut self) -> Result<Option<Val>, MalErr> {
+    pub fn read_form(&mut self) -> Result<Option<Value>, MalErr> {
         let tok = match self.next() {
             Some(tok) => tok,
             None => return Ok(None),
@@ -68,7 +71,7 @@ impl Reader {
             _ => Reader::read_atom(tok)?,
         };
 
-        Ok(Some(val))
+        Ok(Some(val.into()))
     }
 
     pub fn read_atom(tok: String) -> Result<Val, MalErr> {
@@ -86,18 +89,18 @@ impl Reader {
         }
 
         if let Some(s) = make_string(tok.as_str())? {
-            Ok(Val::String(s))
+            Ok(Val::String(s.into()))
         } else if let Some(&b':') = tok.as_bytes().get(0) {
             // If it starts with a colon, slicing the rest shoudln't panic.
             let rest = &tok[1..];
-            Ok(Val::Keyword(rest.to_string()))
+            Ok(Val::Keyword(rest.into()))
         } else {
-            Ok(Val::Symbol(tok))
+            Ok(Val::Symbol(tok.into()))
         }
     }
 
-    pub fn read_until(&mut self, zig: &str) -> Result<Vec<Val>, MalErr> {
-        let mut vals: Vec<Val> = Vec::new();
+    pub fn read_until(&mut self, zig: &str) -> Result<Vec<Value>, MalErr> {
+        let mut vals: Vec<Value> = Vec::new();
 
         loop {
             let val = self.read_form()?;
@@ -105,8 +108,8 @@ impl Reader {
                 None => return Err(MalErr::ReadErr("unexpected end of input".into())),
                 Some(val) => val,
             };
-            if let Val::Symbol(s) = &val {
-                if s.as_str() == zig {
+            if let Val::Symbol(s) = *val {
+                if s.as_bytes() == zig.as_bytes() {
                     return Ok(vals);
                 }
             }
@@ -156,13 +159,13 @@ fn make_string(chars: &str) -> Result<Option<String>, MalErr> {
     Ok(Some(s))
 }
 
-fn assemble_map(mut vals: Vec<Val>) -> Result<BTreeMap<Val, Val>, MalErr> {
-    let mut map: BTreeMap<Val, Val> = BTreeMap::new();
+fn assemble_map(mut vals: Vec<Value>) -> Result<TreeMap, MalErr> {
+    let mut map: TreeMap = BTreeMap::new();
     let mut toks = vals.drain(..);
 
     loop {
-        let k = match toks.next() {
-            None => return Ok(map),
+        let k = match toks.next().map(|a| Arc::into_inner(a)) {
+            None => return Ok(map.into()),
             Some(Val::String(s)) => Val::String(s),
             Some(Val::Keyword(s)) => Val::Keyword(s),
             v => {

@@ -14,6 +14,7 @@ pub enum MalErr {
     ReadErr(Cow<'static, str>),
     ArgErr(Cow<'static, str>),
     ExecErr(Cow<'static, str>),
+    TypeErr(Cow<'static, str>),
 }
 
 impl Display for MalErr {
@@ -24,7 +25,7 @@ impl Display for MalErr {
 
 impl std::error::Error for MalErr {}
 
-pub type Res = Result<types::Val, MalErr>;
+pub type Res = Result<types::Value, MalErr>;
 
 #[cfg(test)]
 pub mod test {

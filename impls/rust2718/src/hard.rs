@@ -4,7 +4,7 @@
 use crate::{types::Val, MalErr, Res};
 
 pub mod math;
-
+/*
 fn map_vec(f: &dyn Fn(&[Val]) -> Res, vals: &[Val]) -> Result<Vec<Val>, MalErr> {
     vals.iter().map(|v| f(std::slice::from_ref(v))).collect()
 }
@@ -27,3 +27,4 @@ pub fn map(args: &[Val]) -> Res {
         )),
     }
 }
+*/

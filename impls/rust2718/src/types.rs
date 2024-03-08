@@ -6,34 +6,61 @@ pub use lambda::{Fun, Lambda};
 
 use std::{
     collections::BTreeMap,
-    fmt::{Debug, Display, Formatter, Write},
+    fmt::{Debug, Display, Formatter},
+    sync::Arc,
 };
 
 use ordered_float::OrderedFloat;
 
 use crate::MalErr;
 
-pub type TreeMap = BTreeMap<Val, Val>;
+pub type TreeMap = BTreeMap<Val, Value>;
 
-#[derive(Clone, PartialEq, PartialOrd, Ord, Eq, Hash)]
+#[derive(PartialEq, PartialOrd, Ord, Eq, Hash)]
 pub enum Val {
     Nil,
     True,
     False,
-    Symbol(String),
-    Keyword(String),
-    String(String),
+    Symbol(Box<str>),
+    Keyword(Box<str>),
+    String(Box<str>),
     Float(OrderedFloat<f64>),
     Int(i64),
-    List(Vec<Val>),
-    Array(Vec<Val>),
+    List(Vec<Value>),
+    Array(Vec<Value>),
     Map(TreeMap),
     Fun(Fun),
 }
 
+impl Val {
+    pub fn try_clone(&self) -> Result<Val, MalErr> {
+        let val = match self {
+            Val::Nil => Val::Nil,
+            Val::True => Val::True,
+            Val::False => Val::False,
+            Val::Symbol(b) => Val::Symbol(b.clone()),
+            Val::Keyword(b) => Val::Keyword(b.clone()),
+            Val::String(b) => Val::String(b.clone()),
+            Val::Float(x) => Val::Float(*x),
+            Val::Int(n) => Val::Int(*n),
+            Val::List(v) => Val::List(v.clone()),
+            Val::Array(v) => Val::Array(v.clone()),
+            _ => {
+                return Err(MalErr::TypeErr(std::borrow::Cow::from(format!(
+                    "not clonable: {:?}",
+                    self
+                ))))
+            }
+        };
+        Ok(val)
+    }
+}
+
+pub type Value = Arc<Val>;
+
 fn write_collection(
     f: &mut Formatter<'_>,
-    vals: &[Val],
+    vals: &[Value],
     open: &str,
     close: &str,
 ) -> std::fmt::Result {
@@ -81,7 +108,7 @@ impl Display for Val {
 
 fn debug_write_collection(
     f: &mut Formatter<'_>,
-    vals: &[Val],
+    vals: &[Value],
     open: &str,
     close: &str,
 ) -> std::fmt::Result {
@@ -127,30 +154,53 @@ impl Debug for Val {
     }
 }
 
-impl From<bool> for Val {
-    fn from(b: bool) -> Val {
-        if b {
-            Val::True
+pub trait IntoValue {
+    fn into(self) -> Value;
+}
+
+impl IntoValue for bool {
+    fn into(self) -> Value {
+        if self {
+            Arc::new(Val::True)
         } else {
-            Val::False
+            Arc::new(Val::False)
         }
     }
 }
 
-impl From<i64> for Val {
-    fn from(n: i64) -> Val {
-        Val::Int(n)
+impl IntoValue for i64 {
+    fn into(self) -> Value {
+        Arc::new(Val::Int(self))
     }
 }
 
-impl From<f64> for Val {
-    fn from(x: f64) -> Val {
-        Val::Float(OrderedFloat(x))
+impl IntoValue for f64 {
+    fn into(self) -> Value {
+        Arc::new(Val::Float(OrderedFloat(self)))
     }
 }
 
-impl From<OrderedFloat<f64>> for Val {
-    fn from(x: OrderedFloat<f64>) -> Val {
-        Val::Float(x)
+impl IntoValue for OrderedFloat<f64> {
+    fn into(self) -> Value {
+        Arc::new(Val::Float(self))
+    }
+}
+
+impl IntoValue for String {
+    fn into(self) -> Value {
+        Arc::new(Val::String(self.into_boxed_str()))
+    }
+}
+
+impl IntoValue for &str {
+    fn into(self) -> Value {
+        let b: Box<str> = Into::into(self);
+        Arc::new(Val::String(b))
+    }
+}
+
+impl IntoValue for Fun {
+    fn into(self) -> Value {
+        Arc::new(Val::Fun(self))
     }
 }

@@ -9,12 +9,10 @@ use std::{
     sync::Arc,
 };
 
-use super::Val;
+use super::{Val, Value};
 use crate::{MalErr, Res};
 
-pub trait Lambda: Fn(&[Val]) -> Res {}
-
-impl<F> Lambda for F where F: Fn(&[Val]) -> Res {}
+pub type Lambda = dyn Fn(&[Value]) -> Res;
 
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 struct FunHash([u8; 32]);
@@ -51,11 +49,10 @@ fn new_hash() -> FunHash {
     FunHash(a)
 }
 
-#[derive(Clone)]
 pub struct Fun {
     name: String,
     hash: FunHash,
-    lambda: Arc<Box<dyn Lambda>>,
+    lambda: Box<Lambda>,
 }
 
 impl PartialEq for Fun {
@@ -97,17 +94,17 @@ impl Debug for Fun {
 }
 
 impl Fun {
-    pub fn new(name: String, f: Box<dyn Lambda>) -> Fun {
-        let lambda = Arc::new(f);
+    pub fn new(name: String, f: &Lambda) -> Fun {
+        let lambda = Box::new(f);
         let hash = new_hash();
         Fun { name, hash, lambda }
     }
 
-    pub fn call(&self, args: &[Val]) -> Result<Val, MalErr> {
-        (**self.lambda)(args)
+    pub fn call(&self, args: &[Value]) -> Res {
+        (*self.lambda)(args)
     }
 
-    pub fn fun(&self) -> &dyn Fn(&[Val]) -> Res {
+    pub fn fun(&self) -> &Lambda {
         &*self.lambda
     }
 }
