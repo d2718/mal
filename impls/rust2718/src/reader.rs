@@ -108,7 +108,7 @@ impl Reader {
                 None => return Err(MalErr::ReadErr("unexpected end of input".into())),
                 Some(val) => val,
             };
-            if let Val::Symbol(s) = *val {
+            if let Val::Symbol(s) = val.as_ref() {
                 if s.as_bytes() == zig.as_bytes() {
                     return Ok(vals);
                 }
@@ -164,15 +164,17 @@ fn assemble_map(mut vals: Vec<Value>) -> Result<TreeMap, MalErr> {
     let mut toks = vals.drain(..);
 
     loop {
-        let k = match toks.next().map(|a| Arc::into_inner(a)) {
+        let k = match toks.next() {
             None => return Ok(map.into()),
-            Some(Val::String(s)) => Val::String(s),
-            Some(Val::Keyword(s)) => Val::Keyword(s),
-            v => {
-                return Err(MalErr::ReadErr(
-                    format!("invalid hash-map key: {:?}", &v).into(),
-                ))
-            }
+            Some(a) => match a.as_ref() {
+                Val::String(s) => Val::String(s.clone()),
+                Val::Keyword(s) => Val::Keyword(s.clone()),
+                v => {
+                    return Err(MalErr::ReadErr(
+                        format!("invalid hash-map key: {:?}", &v).into(),
+                    ))
+                }
+            },
         };
         let v = match toks.next() {
             None => {

@@ -12,7 +12,11 @@ use std::{
 use super::{Val, Value};
 use crate::{MalErr, Res};
 
-pub type Lambda = dyn Fn(&[Value]) -> Res;
+pub trait Lambda {
+    fn call(&self, args: &[Value]) -> Res;
+}
+
+pub type Builtin = dyn Fn(&[Value]) -> Res + 'static;
 
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 struct FunHash([u8; 32]);
@@ -52,7 +56,7 @@ fn new_hash() -> FunHash {
 pub struct Fun {
     name: String,
     hash: FunHash,
-    lambda: Box<Lambda>,
+    func: Box<Builtin>,
 }
 
 impl PartialEq for Fun {
@@ -94,17 +98,15 @@ impl Debug for Fun {
 }
 
 impl Fun {
-    pub fn new(name: String, f: &Lambda) -> Fun {
-        let lambda = Box::new(f);
+    pub fn new(name: String, f: &'static Builtin) -> Fun {
+        let func = Box::new(f);
         let hash = new_hash();
-        Fun { name, hash, lambda }
+        Fun { name, hash, func }
     }
+}
 
-    pub fn call(&self, args: &[Value]) -> Res {
-        (*self.lambda)(args)
-    }
-
-    pub fn fun(&self) -> &Lambda {
-        &*self.lambda
+impl Lambda for Fun {
+    fn call(&self, args: &[Value]) -> Res {
+        (self.func)(args)
     }
 }

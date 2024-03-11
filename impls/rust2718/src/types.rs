@@ -2,7 +2,7 @@
 Types.
 */
 mod lambda;
-pub use lambda::{Fun, Lambda};
+pub use lambda::{Builtin, Fun, Lambda};
 
 use std::{
     collections::BTreeMap,

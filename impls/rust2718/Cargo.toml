@@ -15,10 +15,14 @@ tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 name = "step0_repl"
 path = "src/bin/step0_repl.rs"
 
-[[bin]]
-name = "step1_read_print"
-path = "src/bin/step1_read_print.rs"
+#[[bin]]
+#name = "step1_read_print"
+#path = "src/bin/step1_read_print.rs"
+
+#[[bin]]
+#name = "step2_eval"
+#path = "src/bin/step2_eval.rs"
 
 [[bin]]
-name = "step2_eval"
-path = "src/bin/step2_eval.rs"
+name = "step3_env"
+path = "/src/bin/step3_env.rs"

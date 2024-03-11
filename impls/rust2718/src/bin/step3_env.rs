@@ -1,4 +1,5 @@
 use rust2718::{
+    env::Envr,
     eval::{default_env, eval},
     printer::pr_str,
     reader::Reader,
@@ -31,9 +32,9 @@ fn print(val: &Value, readably: bool) -> String {
         val.to_string()
     }
 }
-fn rep(s: String) -> String {
+fn rep(s: String, env: &Envr) -> String {
     match read(&s) {
-        Ok(val) => match eval(val, &default_env()) {
+        Ok(val) => match eval(val, env) {
             Ok(val) => print(&val, true),
             Err(e) => format!("{}", &e),
         },
@@ -50,11 +51,12 @@ fn main() {
         .edit_mode(EditMode::Emacs)
         .build();
     let mut rl = DefaultEditor::with_config(rl_config).unwrap();
+    let env = env::default_env();
 
     loop {
         match rl.readline("user> ") {
             Ok(line) => {
-                let v = rep(line);
+                let v = rep(line, &env);
                 println!("{}", &v);
             }
             Err(_) => std::process::exit(0),
