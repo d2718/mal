@@ -2,6 +2,7 @@
 Types
 */
 use std::{
+    collections::BTreeMap,
     fmt::{Debug, Display, Formatter},
     ops::Deref,
     sync::{Arc, RwLock},
@@ -12,8 +13,10 @@ use ordered_float::OrderedFloat;
 pub mod builtin;
 mod lambda;
 mod list;
+mod map;
 pub use lambda::{Builtin, Lambda, StaticFunc};
 pub use list::List;
+pub use map::Map;
 
 #[derive(Clone, Debug)]
 pub enum Val {
@@ -26,6 +29,7 @@ pub enum Val {
     Symbol(Arc<str>),
     List(Arc<List>),
     Vector(Arc<RwLock<Vec<Val>>>),
+    Map(Arc<Map>),
     Func(Arc<dyn Lambda>),
 }
 
@@ -52,6 +56,7 @@ impl Display for Val {
             Symbol(ref s) => write!(f, "{}", s),
             List(a) => write_list(&a, f),
             Vector(a) => write_vector(&a, f),
+            Map(a) => write_map(&a, f),
             Func(fun) => write!(f, "{}", fun),
         }
     }
@@ -85,6 +90,18 @@ fn write_vector(v: &Arc<RwLock<Vec<Val>>>, f: &mut Formatter<'_>) -> std::fmt::R
     write!(f, "]")
 }
 
+fn write_map(m: &Arc<Map>, f: &mut Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{{")?;
+    let mut val_iter = m.iter();
+    if let Some((k, v)) = val_iter.next() {
+        write!(f, "{}: {}", k, v)?;
+    }
+    while let Some((k, v)) = val_iter.next() {
+        write!(f, " {}: {}", k, v)?;
+    }
+    write!(f, "}}")
+}
+
 impl From<()> for Val {
     fn from(_: ()) -> Val {
         Val::Nil
@@ -116,6 +133,12 @@ impl From<f64> for Val {
 impl From<Arc<List>> for Val {
     fn from(a: Arc<List>) -> Val {
         Val::List(a.clone())
+    }
+}
+
+impl From<Arc<Map>> for Val {
+    fn from(a: Arc<Map>) -> Val {
+        Val::Map(a.clone())
     }
 }
 

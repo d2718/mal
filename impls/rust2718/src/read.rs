@@ -7,7 +7,11 @@ use once_cell::sync::Lazy;
 use regex::{bytes, Regex};
 use tracing::{event, instrument, Level};
 
-use crate::{error, types::List, ErrType, MalErr, Val};
+use crate::{
+    error,
+    types::{List, Map},
+    ErrType, MalErr, Val,
+};
 
 static TOKENIZER: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"[\s,]*(~@|[\[\]{}()'`~^@]|"(?:\.|[^\"])*"?|;.*|[^\s\[\]{}('",;)]*)"#)
@@ -99,6 +103,10 @@ impl Reader {
                 let vals = self.read_until(Token::CloseBracket)?;
                 Val::vec(vals)
             }
+            Token::OpenBrace => {
+                let map_arc = self.read_map()?;
+                Val::Map(map_arc)
+            }
             Token::Comment(_) => return Ok(None),
             Token::Obj(obj) => read_atom(obj)?,
             Token::SingleQuote => {
@@ -128,6 +136,26 @@ impl Reader {
                 Some(val) => val,
             };
             vals.push(val);
+        }
+    }
+
+    fn read_map(&mut self) -> Result<Arc<Map>, MalErr> {
+        let map = Arc::new(Map::default());
+
+        loop {
+            if self.peek() == Some(&Token::CloseBrace) {
+                let _ = self.next();
+                return Ok(map);
+            }
+            let key = match self.read_form()? {
+                None => return MalErr::read("unexpected end of input"),
+                Some(k) => k,
+            };
+            let val = match self.read_form()? {
+                None => return MalErr::read("unexpected end of input"),
+                Some(v) => v,
+            };
+            let _ = map.insert(key, val)?;
         }
     }
 }
