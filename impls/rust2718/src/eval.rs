@@ -11,11 +11,16 @@ use tracing::{event, Level};
 
 use crate::{
     error,
-    types::{builtin, Builtin, List, StaticFunc},
+    types::{builtin::math, Builtin, List, StaticFunc},
     ErrType, MalErr, Res, Val,
 };
 
-static DEFAULT_ENV: &[(&'static str, StaticFunc)] = &[("+", &builtin::add), ("-", &builtin::sub)];
+const DEFAULT_ENV: &[(&str, &StaticFunc)] = &[
+    ("+", &math::add),
+    ("-", &math::sub),
+    ("*", &math::mul),
+    ("/", &math::div),
+];
 
 #[derive(Debug)]
 pub struct Env {
@@ -28,6 +33,10 @@ impl Env {
             map: RwLock::new(BTreeMap::default()),
         }
     }
+
+    pub fn get<S: AsRef<str>>(&self, s: S) -> Option<Val> {
+        self.map.read().unwrap().get(s.as_ref()).map(|v| v.clone())
+    }
 }
 
 impl Default for Env {
@@ -35,7 +44,12 @@ impl Default for Env {
         let mut map = BTreeMap::default();
         for (name, func) in DEFAULT_ENV.iter() {
             let f = Builtin::new(name, func);
-            map.insert(name.into_boxed_str(), f.into())
+            let name: Box<str> = (*name).into();
+            map.insert(name, f.into());
+        }
+
+        Env {
+            map: RwLock::new(map),
         }
     }
 }
@@ -46,7 +60,7 @@ pub fn eval(envt: &Env, ast: Val) -> Res {
     match ast {
         Val::List(a) => {
             if a.is_empty() {
-                return Ok(ast);
+                return Ok(a.into());
             }
             let a = a.clone();
             match eval_ast(envt, a.into())? {
@@ -70,7 +84,7 @@ pub fn eval_ast(envt: &Env, ast: Val) -> Res {
     event!(Level::TRACE, "eval_ast( {:?}, {:?} )", &envt, &ast);
 
     match ast {
-        Val::Symbol(s) => match envt.map.get(s.as_ref()) {
+        Val::Symbol(s) => match envt.get(s.as_ref()) {
             Some(v) => Ok(v.clone()),
             None => {
                 return Err(error::err(

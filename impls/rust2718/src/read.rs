@@ -134,9 +134,9 @@ impl Reader {
 
 fn read_atom(obj: String) -> Result<Val, MalErr> {
     if let Ok(i) = obj.parse::<i64>() {
-        return Ok(Val::Int(i));
+        return Ok(i.into());
     } else if let Ok(x) = obj.parse::<f64>() {
-        return Ok(Val::Float(x));
+        return Ok(x.into());
     }
 
     match obj.as_str() {

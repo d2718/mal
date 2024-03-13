@@ -9,7 +9,7 @@ use std::{
 
 use crate::{types::List, Res};
 
-pub type StaticFunc = &'static dyn Fn(Arc<List>) -> Res;
+pub type StaticFunc = dyn Fn(Arc<List>) -> Res;
 
 pub trait Lambda: Display + Debug {
     fn call(&self, args: Arc<List>) -> Res;
@@ -17,12 +17,15 @@ pub trait Lambda: Display + Debug {
 
 pub struct Builtin {
     name: &'static str,
-    func: StaticFunc,
+    func: Arc<StaticFunc>,
 }
 
 impl Builtin {
-    pub fn new(name: &'static str, func: StaticFunc) -> Builtin {
-        Builtin { name, func }
+    pub fn new(name: &'static str, func: &'static StaticFunc) -> Builtin {
+        Builtin {
+            name,
+            func: Arc::new(func.clone()),
+        }
     }
 }
 

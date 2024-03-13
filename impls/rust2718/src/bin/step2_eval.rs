@@ -1,4 +1,9 @@
-use rust2718::{error::err, eval::Env, read::Reader, ErrType, MalErr, Val};
+use rust2718::{
+    error::err,
+    eval::{eval, Env},
+    read::Reader,
+    ErrType, MalErr, Val,
+};
 
 fn read(text: &str) -> Result<Val, MalErr> {
     let mut r = Reader::default();
@@ -11,7 +16,7 @@ fn print(val: &Val) -> String {
 }
 
 fn rep(s: String, envt: &Env) -> String {
-    match read(&s).map(|v| eval::eval(v)) {
+    match read(&s).and_then(|v| eval(envt, v)) {
         Ok(val) => print(&val),
         Err(e) => format!("{:?}", &e),
     }
