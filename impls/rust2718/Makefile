@@ -4,7 +4,7 @@
 
 step0_repl: Cargo.toml
 
-step1_read_print: Cargo.toml src/lib.rs src/printer.rs src/reader.rs src/types.rs src/bin/step1_read_print.rs
+step1_read_print: Cargo.toml src/*.rs src/*/*.rs src/bin/step1_read_print.rs
 	cargo build --bin step1_read_print
 	cp target/debug/step1_read_print ./
 	

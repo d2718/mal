@@ -11,18 +11,18 @@ rustyline = "13.0.0"
 tracing = { version = "0.1.40", features = ["attributes"] }
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 
-[[bin]]
-name = "step0_repl"
-path = "src/bin/step0_repl.rs"
+#[[bin]]
+#name = "step0_repl"
+#path = "src/bin/step0_repl.rs"
 
 #[[bin]]
 #name = "step1_read_print"
 #path = "src/bin/step1_read_print.rs"
 
-#[[bin]]
-#name = "step2_eval"
-#path = "src/bin/step2_eval.rs"
-
 [[bin]]
-name = "step3_env"
-path = "/src/bin/step3_env.rs"
+name = "step2_eval"
+path = "src/bin/step2_eval.rs"
+
+#[[bin]]
+#name = "step3_env"
+#path = "/src/bin/step3_env.rs"

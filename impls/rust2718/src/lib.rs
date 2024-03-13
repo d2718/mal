@@ -1,56 +1,46 @@
-pub mod env;
-pub mod eval;
-pub mod hard;
-pub mod printer;
-pub mod reader;
-pub mod types;
-
-use std::{
-    borrow::Cow,
-    fmt::{Display, Formatter},
+use tracing::{Level, Metadata, Subscriber};
+use tracing_subscriber::{
+    layer::{Context, Layer},
+    prelude::*,
 };
 
-#[derive(Debug)]
-pub enum MalErr {
-    ReadErr(Cow<'static, str>),
-    ArgErr(Cow<'static, str>),
-    ExecErr(Cow<'static, str>),
-    TypeErr(Cow<'static, str>),
+pub mod error;
+pub mod eval;
+pub mod read;
+pub mod types;
+
+pub use crate::error::{ErrType, MalErr};
+pub use crate::types::Val;
+
+pub type Res = Result<Val, MalErr>;
+
+struct LogFilter {
+    lvl: Level,
 }
 
-impl Display for MalErr {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+impl LogFilter {
+    pub fn new(lvl: Level) -> LogFilter {
+        LogFilter { lvl }
     }
 }
 
-impl std::error::Error for MalErr {}
-
-pub type Res = Result<types::Value, MalErr>;
-
-#[cfg(test)]
-pub mod test {
-    use std::sync::RwLock;
-
-    static LOGGING_STARTED: RwLock<bool> = RwLock::new(false);
-
-    pub fn start_logging() {
-        use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-
-        if *LOGGING_STARTED.read().unwrap() {
-            return;
+impl<S: Subscriber> Layer<S> for LogFilter {
+    fn enabled(&self, meta: &Metadata<'_>, _: Context<'_, S>) -> bool {
+        if meta.level() > &self.lvl {
+            return false;
         }
 
-        let mut has_started = LOGGING_STARTED.write().unwrap();
-        if *has_started {
-            return;
+        if meta.target().starts_with("mal") || meta.target().starts_with("step") {
+            return true;
         }
 
-        tracing_subscriber::registry()
-            .with(fmt::layer())
-            .with(EnvFilter::from_env("LOG"))
-            .init();
-
-        *has_started = true;
+        false
     }
+}
+
+pub fn start_logging(level: Level) {
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .with(LogFilter::new(level))
+        .init();
 }

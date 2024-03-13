@@ -1,206 +1,132 @@
 /*!
-Types.
+Types
 */
-mod lambda;
-pub use lambda::{Builtin, Fun, Lambda};
-
 use std::{
-    collections::BTreeMap,
     fmt::{Debug, Display, Formatter},
-    sync::Arc,
+    ops::Deref,
+    sync::{Arc, RwLock},
 };
 
 use ordered_float::OrderedFloat;
 
-use crate::MalErr;
+pub mod builtin;
+mod lambda;
+mod list;
+pub use lambda::{Builtin, Lambda, StaticFunc};
+pub use list::List;
 
-pub type TreeMap = BTreeMap<Val, Value>;
-
-#[derive(PartialEq, PartialOrd, Ord, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub enum Val {
     Nil,
     True,
     False,
-    Symbol(Box<str>),
-    Keyword(Box<str>),
-    String(Box<str>),
-    Float(OrderedFloat<f64>),
     Int(i64),
-    List(Vec<Value>),
-    Array(Vec<Value>),
-    Map(TreeMap),
-    Fun(Fun),
+    Float(OrderedFloat<f64>),
+    String(Arc<str>),
+    Symbol(Arc<str>),
+    List(Arc<List>),
+    Vector(Arc<RwLock<Vec<Val>>>),
+    Func(Arc<dyn Lambda>),
 }
 
 impl Val {
-    pub fn try_clone(&self) -> Result<Val, MalErr> {
-        let val = match self {
-            Val::Nil => Val::Nil,
-            Val::True => Val::True,
-            Val::False => Val::False,
-            Val::Symbol(b) => Val::Symbol(b.clone()),
-            Val::Keyword(b) => Val::Keyword(b.clone()),
-            Val::String(b) => Val::String(b.clone()),
-            Val::Float(x) => Val::Float(*x),
-            Val::Int(n) => Val::Int(*n),
-            Val::List(v) => Val::List(v.clone()),
-            Val::Array(v) => Val::Array(v.clone()),
-            _ => {
-                return Err(MalErr::TypeErr(std::borrow::Cow::from(format!(
-                    "not clonable: {:?}",
-                    self
-                ))))
-            }
-        };
-        Ok(val)
+    pub fn vec<V>(v: V) -> Val
+    where
+        Vec<Val>: From<V>,
+    {
+        Val::Vector(Arc::new(RwLock::new(v.into())))
     }
-}
-
-pub type Value = Arc<Val>;
-
-fn write_collection(
-    f: &mut Formatter<'_>,
-    vals: &[Value],
-    open: &str,
-    close: &str,
-) -> std::fmt::Result {
-    write!(f, "{}", open)?;
-    let mut stuff = vals.iter();
-    if let Some(ref v) = stuff.next() {
-        write!(f, "{}", v)?;
-    }
-    for v in stuff {
-        write!(f, " {}", v)?;
-    }
-    write!(f, "{}", close)
-}
-
-fn write_map(f: &mut Formatter<'_>, m: &TreeMap) -> std::fmt::Result {
-    write!(f, "{{")?;
-    let mut stuff = m.iter();
-    if let Some((k, v)) = stuff.next() {
-        write!(f, "{} {}", k, v)?;
-    }
-    for (k, v) in stuff {
-        write!(f, " {} {}", k, v)?
-    }
-    write!(f, "}}")
 }
 
 impl Display for Val {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        use Val::*;
+
         match self {
-            Val::Nil => write!(f, "nil"),
-            Val::True => write!(f, "T"),
-            Val::False => write!(f, "F"),
-            Val::String(ref s) => Display::fmt(s, f),
-            Val::Keyword(ref s) => write!(f, ":{}", s),
-            Val::Symbol(ref s) => Display::fmt(s, f),
-            Val::Float(ref x) => Display::fmt(x, f),
-            Val::Int(ref i) => Display::fmt(i, f),
-            Val::List(v) => write_collection(f, v.as_slice(), "(", ")"),
-            Val::Array(v) => write_collection(f, v.as_slice(), "[", "]"),
-            Val::Map(m) => write_map(f, m),
-            Val::Fun(_) => Display::fmt(self, f),
+            Nil => write!(f, "nil"),
+            True => write!(f, "T"),
+            False => write!(f, "F"),
+            Int(n) => write!(f, "{}", &n),
+            Float(x) => write!(f, "{}", &x),
+            String(ref s) => write!(f, "\"{}\"", s),
+            Symbol(ref s) => write!(f, "{}", s),
+            List(a) => write_list(&a, f),
+            Vector(a) => write_vector(&a, f),
+            Func(fun) => write!(f, "{}", fun),
         }
     }
 }
 
-fn debug_write_collection(
-    f: &mut Formatter<'_>,
-    vals: &[Value],
-    open: &str,
-    close: &str,
-) -> std::fmt::Result {
-    write!(f, "{}", open)?;
-    let mut stuff = vals.iter();
-    if let Some(ref v) = stuff.next() {
-        write!(f, "{:?}", v)?;
-    }
-    for v in stuff {
-        write!(f, " {:?}", v)?;
-    }
-    write!(f, "{}", close)
-}
-
-fn debug_write_map(f: &mut Formatter<'_>, m: &TreeMap) -> std::fmt::Result {
-    write!(f, "{{")?;
-    let mut stuff = m.iter();
-    if let Some((k, v)) = stuff.next() {
-        write!(f, "{:?} {:?}", k, v)?;
-    }
-    for (k, v) in stuff {
-        write!(f, " {:?} {:?}", k, v)?
-    }
-    write!(f, "}}")
-}
-
-impl Debug for Val {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Val::Nil
-            | Val::True
-            | Val::False
-            | Val::Keyword(_)
-            | Val::Symbol(_)
-            | Val::Float(_)
-            | Val::Int(_) => Display::fmt(self, f),
-            Val::String(ref s) => write!(f, "{:?}", s),
-            Val::List(v) => debug_write_collection(f, v.as_slice(), "(", ")"),
-            Val::Array(v) => debug_write_collection(f, v.as_slice(), "[", "]"),
-            Val::Map(m) => debug_write_map(f, m),
-            Val::Fun(_) => Debug::fmt(self, f),
+fn write_list(list: &Arc<List>, f: &mut Formatter) -> std::fmt::Result {
+    match list.deref() {
+        List::Nil => write!(f, "()"),
+        List::Node { ref next, ref val } => {
+            write!(f, "({}", val)?;
+            let mut node = next.clone();
+            while let List::Node { ref val, ref next } = node.deref() {
+                write!(f, " {}", val)?;
+                node = next.clone();
+            }
+            write!(f, ")")
         }
     }
 }
 
-pub trait IntoValue {
-    fn into(self) -> Value;
+fn write_vector(v: &Arc<RwLock<Vec<Val>>>, f: &mut Formatter<'_>) -> std::fmt::Result {
+    write!(f, "[")?;
+    let handle = v.deref().read().unwrap();
+    let mut val_iter = handle.iter();
+    if let Some(val) = val_iter.next() {
+        write!(f, "{}", val)?;
+    }
+    while let Some(val) = val_iter.next() {
+        write!(f, " {}", val)?;
+    }
+    write!(f, "]")
 }
 
-impl IntoValue for bool {
-    fn into(self) -> Value {
-        if self {
-            Arc::new(Val::True)
+impl From<()> for Val {
+    fn from(_: ()) -> Val {
+        Val::Nil
+    }
+}
+
+impl From<bool> for Val {
+    fn from(b: bool) -> Val {
+        if b {
+            Val::True
         } else {
-            Arc::new(Val::False)
+            Val::False
         }
     }
 }
 
-impl IntoValue for i64 {
-    fn into(self) -> Value {
-        Arc::new(Val::Int(self))
+impl From<i64> for Val {
+    fn from(n: i64) -> Val {
+        Val::Int(n)
     }
 }
 
-impl IntoValue for f64 {
-    fn into(self) -> Value {
-        Arc::new(Val::Float(OrderedFloat(self)))
+impl From<f64> for Val {
+    fn from(x: f64) -> Val {
+        Val::Float(OrderedFloat(x))
     }
 }
 
-impl IntoValue for OrderedFloat<f64> {
-    fn into(self) -> Value {
-        Arc::new(Val::Float(self))
+impl From<Arc<List>> for Val {
+    fn from(a: Arc<List>) -> Val {
+        Val::List(a.clone())
     }
 }
 
-impl IntoValue for String {
-    fn into(self) -> Value {
-        Arc::new(Val::String(self.into_boxed_str()))
+impl From<OrderedFloat<f64>> for Val {
+    fn from(x: OrderedFloat<f64>) -> Val {
+        Val::Float(x)
     }
 }
 
-impl IntoValue for &str {
-    fn into(self) -> Value {
-        let b: Box<str> = Into::into(self);
-        Arc::new(Val::String(b))
-    }
-}
-
-impl IntoValue for Fun {
-    fn into(self) -> Value {
-        Arc::new(Val::Fun(self))
+impl From<Builtin> for Val {
+    fn from(b: Builtin) -> Val {
+        Val::Func(Arc::new(b))
     }
 }

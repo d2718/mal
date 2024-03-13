@@ -1,78 +1,99 @@
-use std::collections::{BTreeMap, HashMap};
+/*!
+Environments and evaluation.
+*/
 
-use ordered_float::OrderedFloat;
-use tracing::{event, instrument, Level};
-
-use crate::{
-    env::{EnvTree, Envr},
-    hard::math,
-    types::{Builtin, Fun, Lambda, TreeMap, Val, Value},
-    MalErr, Res,
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, RwLock},
 };
 
-fn eval_ast_list(list: &[Value], envt: &Envr) -> Result<Vec<Value>, MalErr> {
-    list.iter()
-        .cloned()
-        .map(|v| eval(v, envt))
-        .collect::<Result<Vec<Value>, MalErr>>()
+use tracing::{event, Level};
+
+use crate::{
+    error,
+    types::{builtin, Builtin, List, StaticFunc},
+    ErrType, MalErr, Res, Val,
+};
+
+static DEFAULT_ENV: &[(&'static str, StaticFunc)] = &[("+", &builtin::add), ("-", &builtin::sub)];
+
+#[derive(Debug)]
+pub struct Env {
+    map: RwLock<BTreeMap<Box<str>, Val>>,
 }
 
-fn eval_ast_map(map: &TreeMap, envt: &Envr) -> Result<TreeMap, MalErr> {
-    map.iter()
-        .map(|(k, v)| eval(v.clone(), envt).map(|v| (k.try_clone().unwrap(), v)))
-        .collect()
-}
-
-#[instrument]
-pub fn eval_ast(ast: Value, envt: &Envr) -> Res {
-    event!(Level::DEBUG, "({:?}, [Env])", &ast);
-    match ast.as_ref() {
-        Val::Symbol(s) => envt.get(s.as_ref()),
-        Val::List(ref l) => Ok(Val::List(eval_ast_list(l.as_slice(), envt)?).into()),
-        Val::Array(ref l) => Ok(Val::Array(eval_ast_list(l.as_slice(), envt)?).into()),
-        Val::Map(ref m) => Ok(Val::Map(eval_ast_map(m, envt)?).into()),
-        _ => Ok(ast),
+impl Env {
+    pub fn empty() -> Env {
+        Env {
+            map: RwLock::new(BTreeMap::default()),
+        }
     }
 }
 
-fn def(envt: &Envr, vals: &[Value]) -> Res {
-    match vals {
-        [sym, rest @ .. ] => {
-            if let Val::Symbol(s) = sym.as_ref() {
-                let v = eval(rest, envt)?;
-                envt.set(s, v);
-                return Ok(Val::Nil.into())
+impl Default for Env {
+    fn default() -> Self {
+        let mut map = BTreeMap::default();
+        for (name, func) in DEFAULT_ENV.iter() {
+            let f = Builtin::new(name, func);
+            map.insert(name.into_boxed_str(), f.into())
+        }
+    }
+}
+
+pub fn eval(envt: &Env, ast: Val) -> Res {
+    event!(Level::TRACE, "eval( {:?}, {:?} )", &envt, &ast);
+
+    match ast {
+        Val::List(a) => {
+            if a.is_empty() {
+                return Ok(ast);
+            }
+            let a = a.clone();
+            match eval_ast(envt, a.into())? {
+                Val::List(mut a) => {
+                    // List shouldn't be empty;
+                    let f = a.next().unwrap();
+                    if let Val::Func(f) = f {
+                        f.call(a)
+                    } else {
+                        Err(error::err(ErrType::Eval, "not callable"))
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
+        x => eval_ast(envt, x),
+    }
+}
+
+pub fn eval_ast(envt: &Env, ast: Val) -> Res {
+    event!(Level::TRACE, "eval_ast( {:?}, {:?} )", &envt, &ast);
+
+    match ast {
+        Val::Symbol(s) => match envt.map.get(s.as_ref()) {
+            Some(v) => Ok(v.clone()),
+            None => {
+                return Err(error::err(
+                    ErrType::Eval,
+                    format!("undefined symbol: {}", &s),
+                ))
             }
         },
-        _ => {},
-    };
+        Val::List(a) => {
+            let mut a = a.clone();
+            let mut v: Vec<Val> = Vec::new();
 
-    return Err(MalErr::ArgErr(format!("can't define: {:?}", vals).into()))
-}
-
-fn apply(list: &[Value], envt: &Envr) -> Res {
-    match list {
-        [] => Ok(Val::Nil.into()),
-        [first, rest @ ..] => match first.as_ref() {
-            Val::Symbol(s) => match s.as_ref() {
-                "def!"
+            while let Some(val) = a.next() {
+                v.push(eval(envt, val)?);
             }
-        }
-    }
-}
 
-#[instrument]
-pub fn eval(ast: Value, envt: &Envr) -> Res {
-    event!(Level::DEBUG, "({:?}, [Env])", &ast);
-    match ast.as_ref() {
-        Val::List(ref l) if l.len() == 0 => Ok(ast),
-        Val::List(ref l) => {
-            let vals = eval_ast_list(l.as_slice(), envt)?;
-            match vals.first().unwrap().as_ref() {
-                Val::Fun(f) => f.call(&vals[1..]),
-                x => Err(MalErr::ExecErr(format!("{:?} is not callable", x).into())),
+            let mut a = List::empty();
+            while let Some(val) = v.pop() {
+                a = a.cons(val);
             }
+
+            Ok(a.into())
         }
-        _ => eval_ast(ast, envt),
+        x => Ok(x),
     }
 }

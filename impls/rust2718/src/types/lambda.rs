@@ -1,112 +1,63 @@
 /*!
-The function type is going to require quite a bit of infrastructure.
+The function type.
 */
 use std::{
     cmp::Ordering,
-    fmt::{Debug, Display, Formatter, Write},
-    hash::{Hash, Hasher},
-    io::Read,
+    fmt::{Debug, Display, Formatter},
     sync::Arc,
 };
 
-use super::{Val, Value};
-use crate::{MalErr, Res};
+use crate::{types::List, Res};
 
-pub trait Lambda {
-    fn call(&self, args: &[Value]) -> Res;
+pub type StaticFunc = &'static dyn Fn(Arc<List>) -> Res;
+
+pub trait Lambda: Display + Debug {
+    fn call(&self, args: Arc<List>) -> Res;
 }
 
-pub type Builtin = dyn Fn(&[Value]) -> Res + 'static;
+pub struct Builtin {
+    name: &'static str,
+    func: StaticFunc,
+}
 
-#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
-struct FunHash([u8; 32]);
-
-impl Display for FunHash {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut a = [0u8; 8];
-        let mut b = [0u8; 8];
-        let mut c = [0u8; 8];
-        let mut d = [0u8; 8];
-        a.as_mut_slice().copy_from_slice(&self.0[0..8]);
-        b.as_mut_slice().copy_from_slice(&self.0[8..16]);
-        c.as_mut_slice().copy_from_slice(&self.0[16..24]);
-        d.as_mut_slice().copy_from_slice(&self.0[24..32]);
-        write!(
-            f,
-            "{:016x}{:016x}{:016x}{:016x}",
-            &u64::from_ne_bytes(a),
-            &u64::from_ne_bytes(b),
-            &u64::from_ne_bytes(c),
-            &u64::from_ne_bytes(d),
-        )
+impl Builtin {
+    pub fn new(name: &'static str, func: StaticFunc) -> Builtin {
+        Builtin { name, func }
     }
 }
 
-fn new_hash() -> FunHash {
-    let mut a: [u8; 32] = [0u8; 32];
-    let mut f = std::fs::File::open("/dev/urandom")
-        .map_err(|e| format!("unable to open /dev/urandom: {}", &e))
-        .unwrap();
-    f.read_exact(&mut a)
-        .map_err(|e| format!("error reading from /dev/urandom: {}", &e))
-        .unwrap();
-    FunHash(a)
-}
-
-pub struct Fun {
-    name: String,
-    hash: FunHash,
-    func: Box<Builtin>,
-}
-
-impl PartialEq for Fun {
+impl PartialEq for Builtin {
     fn eq(&self, other: &Self) -> bool {
-        self.hash == other.hash
+        self.name == other.name
     }
 }
+impl Eq for Builtin {}
 
-impl Eq for Fun {}
-
-impl Ord for Fun {
+impl Ord for Builtin {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.hash.cmp(&other.hash)
+        self.name.cmp(other.name)
     }
 }
-
-impl PartialOrd for Fun {
+impl PartialOrd for Builtin {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Hash for Fun {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.hash.0.hash(state)
-    }
-}
-
-impl Display for Fun {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<Fun {}>", &self.name)
-    }
-}
-
-impl Debug for Fun {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<Fun {} 0x{}", &self.name, &self.hash)
-    }
-}
-
-impl Fun {
-    pub fn new(name: String, f: &'static Builtin) -> Fun {
-        let func = Box::new(f);
-        let hash = new_hash();
-        Fun { name, hash, func }
-    }
-}
-
-impl Lambda for Fun {
-    fn call(&self, args: &[Value]) -> Res {
+impl Lambda for Builtin {
+    fn call(&self, args: Arc<List>) -> Res {
         (self.func)(args)
+    }
+}
+
+impl Display for Builtin {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<{} (builtin function)>", self.name)
+    }
+}
+
+impl Debug for Builtin {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(self, f)
     }
 }
