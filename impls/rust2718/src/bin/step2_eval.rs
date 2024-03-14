@@ -32,8 +32,14 @@ fn start_logging() {
 }
 
 fn main() {
+    use rustyline::{config::EditMode, DefaultEditor};
     start_logging();
-    let mut rl = rustyline::DefaultEditor::new().unwrap();
+
+    let rl_conf = rustyline::Config::builder()
+        .auto_add_history(true)
+        .edit_mode(EditMode::Emacs)
+        .build();
+    let mut rl = DefaultEditor::with_config(rl_conf).unwrap();
     let env = Env::default();
 
     loop {
