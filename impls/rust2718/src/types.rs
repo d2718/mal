@@ -94,10 +94,10 @@ fn write_map(m: &Arc<Map>, f: &mut Formatter<'_>) -> std::fmt::Result {
     write!(f, "{{")?;
     let mut val_iter = m.iter();
     if let Some((k, v)) = val_iter.next() {
-        write!(f, "{}: {}", k, v)?;
+        write!(f, "{} {}", k, v)?;
     }
     while let Some((k, v)) = val_iter.next() {
-        write!(f, " {}: {}", k, v)?;
+        write!(f, " {} {}", k, v)?;
     }
     write!(f, "}}")
 }
@@ -139,6 +139,12 @@ impl From<Arc<List>> for Val {
 impl From<Arc<Map>> for Val {
     fn from(a: Arc<Map>) -> Val {
         Val::Map(a.clone())
+    }
+}
+
+impl From<Vec<Val>> for Val {
+    fn from(v: Vec<Val>) -> Val {
+        Val::Vector(Arc::new(RwLock::new(v)))
     }
 }
 

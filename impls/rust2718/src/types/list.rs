@@ -86,6 +86,10 @@ impl List {
 
         Ok(a)
     }
+
+    pub fn from_val(v: Val) -> Arc<List> {
+        List::empty().cons(v)
+    }
 }
 
 #[cfg(test)]

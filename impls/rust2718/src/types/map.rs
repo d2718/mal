@@ -9,7 +9,11 @@ use std::{
 
 use ordered_float::OrderedFloat;
 
-use crate::{error::err, ErrType, MalErr, Res, Val};
+use crate::{
+    error::err,
+    types::{Lambda, List},
+    ErrType, MalErr, Res, Val,
+};
 
 #[derive(Clone, Debug, PartialOrd, PartialEq, Ord, Eq)]
 enum Key {

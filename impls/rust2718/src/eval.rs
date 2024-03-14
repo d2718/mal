@@ -11,7 +11,7 @@ use tracing::{event, Level};
 
 use crate::{
     error,
-    types::{builtin::math, Builtin, List, StaticFunc},
+    types::{builtin::math, Builtin, Lambda, List, Map, StaticFunc},
     ErrType, MalErr, Res, Val,
 };
 
@@ -107,6 +107,24 @@ pub fn eval_ast(envt: &Env, ast: Val) -> Res {
             }
 
             Ok(a.into())
+        }
+        Val::Vector(a) => {
+            let v: Vec<Val> = a
+                .read()
+                .unwrap()
+                .iter()
+                .cloned()
+                .map(|v| eval(envt, v))
+                .collect::<Result<Vec<_>, MalErr>>()?;
+            Ok(v.into())
+        }
+        Val::Map(a) => {
+            let new_map = Arc::new(Map::default());
+            for (k, v) in a.iter() {
+                new_map.insert(k, eval(envt, v)?)?;
+            }
+            let v: Val = new_map.into();
+            Ok(v)
         }
         x => Ok(x),
     }
