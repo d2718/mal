@@ -4,6 +4,7 @@ use tracing_subscriber::{
     prelude::*,
 };
 
+pub mod env;
 pub mod error;
 pub mod eval;
 pub mod read;

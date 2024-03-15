@@ -4,8 +4,9 @@ The classic singly-linked list.
 use std::{ops::Deref, sync::Arc};
 
 use crate::{
+    error::err,
     types::{Lambda, Val},
-    MalErr,
+    ErrType, MalErr, Res,
 };
 
 #[derive(Debug)]
@@ -33,17 +34,17 @@ impl List {
         })
     }
 
-    pub fn car(self: &Arc<List>) -> Option<Val> {
+    pub fn car(self: &Arc<List>) -> Res {
         match self.deref() {
-            List::Nil => None,
-            List::Node { val, .. } => Some(val.clone()),
+            List::Nil => MalErr::rarg("car expects a non-empty list"),
+            List::Node { val, .. } => Ok(val.clone()),
         }
     }
 
-    pub fn cdr(self: &Arc<List>) -> Arc<List> {
+    pub fn cdr(self: &Arc<List>) -> Result<Arc<List>, MalErr> {
         match self.deref() {
-            List::Nil => self.clone(),
-            List::Node { next, .. } => next.clone(),
+            List::Nil => MalErr::rarg("cdr expects a non-empty list"),
+            List::Node { next, .. } => Ok(next.clone()),
         }
     }
 
@@ -58,12 +59,23 @@ impl List {
         }
     }
 
+    pub fn pop(self: &mut Arc<List>) -> Res {
+        match self.deref().deref() {
+            List::Nil => Err(err(ErrType::Type, "list is empty")),
+            List::Node { next, val } => {
+                let rval = val.clone();
+                *self = next.clone();
+                Ok(rval)
+            }
+        }
+    }
+
     pub fn get_n_args(self: &mut Arc<List>, n: usize) -> Result<Vec<Val>, MalErr> {
         let mut v: Vec<Val> = Vec::with_capacity(n);
         for _ in 0..n {
             match self.next() {
                 Some(val) => v.push(val),
-                None => return MalErr::arg("not enough arguments"),
+                None => return MalErr::rarg("not enough arguments"),
             }
         }
 
@@ -76,7 +88,7 @@ impl List {
 
         while !a.is_empty() {
             temp.push(f.call(a.clone())?);
-            a = a.cdr();
+            a = a.cdr()?;
         }
 
         let mut a = List::empty();

@@ -18,7 +18,7 @@ pub struct MalErr {
 }
 
 impl MalErr {
-    pub fn read<C, T>(msg: C) -> Result<T, MalErr>
+    pub fn rread<C, T>(msg: C) -> Result<T, MalErr>
     where
         Cow<'static, str>: From<C>,
     {
@@ -28,14 +28,21 @@ impl MalErr {
         })
     }
 
-    pub fn arg<C, T>(msg: C) -> Result<T, MalErr>
+    pub fn arg<C>(msg: C) -> MalErr
     where
         Cow<'static, str>: From<C>,
     {
-        Err(MalErr {
+        MalErr {
             flavor: ErrType::Arg,
             msg: msg.into(),
-        })
+        }
+    }
+
+    pub fn rarg<C, T>(msg: C) -> Result<T, MalErr>
+    where
+        Cow<'static, str>: From<C>,
+    {
+        Err(MalErr::arg(msg))
     }
 }
 

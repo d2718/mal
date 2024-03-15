@@ -18,6 +18,8 @@ pub use lambda::{Builtin, Lambda, StaticFunc};
 pub use list::List;
 pub use map::Map;
 
+use crate::MalErr;
+
 #[derive(Clone, Debug)]
 pub enum Val {
     Nil,
@@ -39,6 +41,28 @@ impl Val {
         Vec<Val>: From<V>,
     {
         Val::Vector(Arc::new(RwLock::new(v.into())))
+    }
+
+    pub fn unwrap_symbol(&self) -> Result<Arc<str>, MalErr> {
+        match self {
+            Val::Symbol(s) => Ok(s.clone()),
+            _ => MalErr::rarg("expected a symbol"),
+        }
+    }
+
+    pub fn unwrap_list(&self) -> Result<Arc<List>, MalErr> {
+        match self {
+            Val::List(list) => Ok(list.clone()),
+            Val::Nil => Ok(List::empty()),
+            _ => MalErr::rarg("expected a list"),
+        }
+    }
+
+    pub fn unwrap_func(&self) -> Result<Arc<dyn Lambda>, MalErr> {
+        match self {
+            Val::Func(f) => Ok(f.clone()),
+            _ => MalErr::rarg("expected a function"),
+        }
     }
 }
 

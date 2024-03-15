@@ -4,95 +4,33 @@ Environments and evaluation.
 
 use std::{
     collections::BTreeMap,
+    ops::Deref,
     sync::{Arc, RwLock},
 };
 
 use tracing::{event, Level};
 
 use crate::{
+    env::Env,
     error,
     types::{builtin::math, Builtin, Lambda, List, Map, StaticFunc},
     ErrType, MalErr, Res, Val,
 };
 
-const DEFAULT_ENV: &[(&str, &StaticFunc)] = &[
-    ("+", &math::add),
-    ("-", &math::sub),
-    ("*", &math::mul),
-    ("/", &math::div),
-];
-
-#[derive(Debug)]
-pub struct Env {
-    map: RwLock<BTreeMap<Box<str>, Val>>,
-}
-
-impl Env {
-    pub fn empty() -> Env {
-        Env {
-            map: RwLock::new(BTreeMap::default()),
-        }
-    }
-
-    pub fn get<S: AsRef<str>>(&self, s: S) -> Option<Val> {
-        self.map.read().unwrap().get(s.as_ref()).map(|v| v.clone())
-    }
-}
-
-impl Default for Env {
-    fn default() -> Self {
-        let mut map = BTreeMap::default();
-        for (name, func) in DEFAULT_ENV.iter() {
-            let f = Builtin::new(name, func);
-            let name: Box<str> = (*name).into();
-            map.insert(name, f.into());
-        }
-
-        Env {
-            map: RwLock::new(map),
-        }
-    }
-}
-
-pub fn eval(envt: &Env, ast: Val) -> Res {
+pub fn eval(envt: &Arc<Env>, ast: Val) -> Res {
     event!(Level::TRACE, "eval( {:?}, {:?} )", &envt, &ast);
 
     match ast {
-        Val::List(a) => {
-            if a.is_empty() {
-                return Ok(a.into());
-            }
-            let a = a.clone();
-            match eval_ast(envt, a.into())? {
-                Val::List(mut a) => {
-                    // List shouldn't be empty;
-                    let f = a.next().unwrap();
-                    if let Val::Func(f) = f {
-                        f.call(a)
-                    } else {
-                        Err(error::err(ErrType::Eval, "not callable"))
-                    }
-                }
-                _ => unreachable!(),
-            }
-        }
+        Val::List(a) => apply(envt, a),
         x => eval_ast(envt, x),
     }
 }
 
-pub fn eval_ast(envt: &Env, ast: Val) -> Res {
+pub fn eval_ast(envt: &Arc<Env>, ast: Val) -> Res {
     event!(Level::TRACE, "eval_ast( {:?}, {:?} )", &envt, &ast);
 
     match ast {
-        Val::Symbol(s) => match envt.get(s.as_ref()) {
-            Some(v) => Ok(v.clone()),
-            None => {
-                return Err(error::err(
-                    ErrType::Eval,
-                    format!("undefined symbol: {}", &s),
-                ))
-            }
-        },
+        Val::Symbol(s) => envt.get(s.as_ref()).map(|v| v.clone()),
         Val::List(a) => {
             let mut a = a.clone();
             let mut v: Vec<Val> = Vec::new();
@@ -128,4 +66,48 @@ pub fn eval_ast(envt: &Env, ast: Val) -> Res {
         }
         x => Ok(x),
     }
+}
+
+fn apply(envt: &Arc<Env>, list: Arc<List>) -> Res {
+    event!(Level::TRACE, "apply([ Env ], {:?})", &list);
+
+    let car = match list.car() {
+        Ok(val) => val,
+        Err(_) => return Ok(list.into()),
+    };
+    let rest = list.cdr()?;
+
+    match car {
+        Val::Symbol(s) => match s.deref() {
+            "def!" => return define(envt, rest.car()?, eval(envt, rest.cdr()?.car()?)?),
+            "let" | "let*" => return do_let(&Env::child_of(envt), rest),
+            _ => {}
+        },
+        _ => {}
+    }
+
+    let list = eval_ast(envt, list.into())?.unwrap_list()?;
+    let func = list.car()?.unwrap_func()?;
+    let rest = list.cdr()?;
+    func.call(rest)
+}
+
+fn define(envt: &Arc<Env>, key: Val, val: Val) -> Res {
+    envt.set(&key.unwrap_symbol()?, val.clone());
+    Ok(val)
+}
+
+fn do_let(new_envt: &Arc<Env>, rest: Arc<List>) -> Res {
+    let mut rest = rest.clone();
+    let mut bindings = rest.pop()?.unwrap_list()?;
+    loop {
+        let key = match bindings.next() {
+            Some(s) => s.unwrap_symbol()?,
+            None => break,
+        };
+        let val = eval(new_envt, bindings.pop()?)?;
+        new_envt.set(&key, val);
+    }
+
+    eval(new_envt, rest.next().unwrap_or(Val::Nil))
 }

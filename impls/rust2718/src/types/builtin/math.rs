@@ -6,7 +6,21 @@ use std::sync::Arc;
 
 use ordered_float::OrderedFloat;
 
-use crate::{error::err, types::List, ErrType, MalErr, Res, Val};
+use crate::{
+    error::err,
+    types::{List, StaticFunc},
+    ErrType, MalErr, Res, Val,
+};
+
+pub const BUILTINS: &[(&str, &StaticFunc)] = &[
+    ("+", &add),
+    ("-", &sub),
+    ("*", &mul),
+    ("/", &div),
+    ("div", &int_div),
+    ("mod", &int_mod),
+    ("sqrt", &sqrt),
+];
 
 fn binop<F, G>(f: F, g: G, a: Val, b: Val) -> Res
 where
@@ -81,4 +95,52 @@ pub fn div(args: Arc<List>) -> Res {
     };
 
     Ok(v)
+}
+
+pub fn int_div(args: Arc<List>) -> Res {
+    let mut args = args.clone();
+    let dividend = args
+        .next()
+        .ok_or_else(|| MalErr::arg(format!("div requires two arguments")))?;
+    let divisor = args
+        .next()
+        .ok_or_else(|| MalErr::arg(format!("div requires two arguments")))?;
+
+    match (dividend, divisor) {
+        (_, Val::Int(0)) => Err(MalErr::arg("division by zero")),
+        (Val::Int(n), Val::Int(m)) => Ok((n / m).into()),
+        _ => Err(MalErr::arg("div requires integer arguments")),
+    }
+}
+
+pub fn int_mod(args: Arc<List>) -> Res {
+    let mut args = args.clone();
+    let dividend = args
+        .next()
+        .ok_or_else(|| MalErr::arg("mod requires two arguments"))?;
+    let divisor = args
+        .next()
+        .ok_or_else(|| MalErr::arg("mod requires two arguments"))?;
+
+    match (dividend, divisor) {
+        (_, Val::Int(0)) => Err(MalErr::arg("division by zero")),
+        (Val::Int(n), Val::Int(m)) => Ok((n % m).into()),
+        _ => Err(MalErr::arg("mod requires integer arguments")),
+    }
+}
+
+pub fn sqrt(args: Arc<List>) -> Res {
+    let arg = args.car()?;
+
+    let arg: f64 = match arg {
+        Val::Int(n) => n as f64,
+        Val::Float(x) => x.into(),
+        _ => MalErr::rarg("sqrt requires numeric argument")?,
+    };
+
+    if arg < 0.0 {
+        MalErr::rarg("sqrt requres non-negative argument")?;
+    }
+
+    Ok(arg.sqrt().into())
 }

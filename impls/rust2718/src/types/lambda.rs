@@ -24,7 +24,7 @@ impl Builtin {
     pub fn new(name: &'static str, func: &'static StaticFunc) -> Builtin {
         Builtin {
             name,
-            func: Arc::new(func.clone()),
+            func: Arc::new(func),
         }
     }
 }

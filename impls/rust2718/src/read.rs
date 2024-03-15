@@ -115,7 +115,7 @@ impl Reader {
                     .ok_or_else(|| error::err(ErrType::Read, "unexpected end of input"))?;
                 Val::List(List::empty().cons(quoted).cons(Val::Symbol("quote".into())))
             }
-            x => return MalErr::read(format!("unexpected {:?}", &x)),
+            x => return MalErr::rread(format!("unexpected {:?}", &x)),
         };
 
         Ok(Some(val))
@@ -132,7 +132,7 @@ impl Reader {
             }
             let val = self.read_form()?;
             let val = match val {
-                None => return MalErr::read("unexpected end of input"),
+                None => return MalErr::rread("unexpected end of input"),
                 Some(val) => val,
             };
             vals.push(val);
@@ -148,11 +148,11 @@ impl Reader {
                 return Ok(map);
             }
             let key = match self.read_form()? {
-                None => return MalErr::read("unexpected end of input"),
+                None => return MalErr::rread("unexpected end of input"),
                 Some(k) => k,
             };
             let val = match self.read_form()? {
-                None => return MalErr::read("unexpected end of input"),
+                None => return MalErr::rread("unexpected end of input"),
                 Some(v) => v,
             };
             let _ = map.insert(key, val)?;
@@ -191,7 +191,7 @@ fn make_string(chars: &str) -> Result<Option<String>, MalErr> {
     }
 
     if bytes.len() < 2 || bytes.last() != Some(&b'"') {
-        return MalErr::read("unbalanced string");
+        return MalErr::rread("unbalanced string");
     }
 
     let sub_bytes = &bytes[1..(bytes.len() - 1)];
@@ -206,7 +206,7 @@ fn make_string(chars: &str) -> Result<Option<String>, MalErr> {
                 unescape = true;
                 break;
             } else {
-                return MalErr::read("unbalanced string");
+                return MalErr::rread("unbalanced string");
             }
         }
     }
