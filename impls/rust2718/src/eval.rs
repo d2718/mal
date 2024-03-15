@@ -99,14 +99,25 @@ fn define(envt: &Arc<Env>, key: Val, val: Val) -> Res {
 
 fn do_let(new_envt: &Arc<Env>, rest: Arc<List>) -> Res {
     let mut rest = rest.clone();
-    let mut bindings = rest.pop()?.unwrap_list()?;
-    loop {
-        let key = match bindings.next() {
-            Some(s) => s.unwrap_symbol()?,
-            None => break,
-        };
-        let val = eval(new_envt, bindings.pop()?)?;
-        new_envt.set(&key, val);
+    match rest.pop()? {
+        Val::List(mut a) => loop {
+            let key = match a.next() {
+                Some(s) => s.unwrap_symbol()?,
+                None => break,
+            };
+            let val = eval(new_envt, a.pop()?)?;
+            new_envt.set(&key, val);
+        },
+        Val::Vector(a) => {
+            for chunk in a.read().unwrap().chunks(2) {
+                let (key, val) = match chunk {
+                    [k, v] => (k.unwrap_symbol()?, eval(new_envt, v.clone())?),
+                    _ => return MalErr::rarg("binding for must contain even number of elements"),
+                };
+                new_envt.set(&key, val);
+            }
+        }
+        _ => return MalErr::rarg("binding form must be a list or a vector"),
     }
 
     eval(new_envt, rest.next().unwrap_or(Val::Nil))
