@@ -2,19 +2,14 @@
 Environments and evaluation.
 */
 
-use std::{
-    collections::BTreeMap,
-    ops::Deref,
-    sync::{Arc, RwLock},
-};
+use std::{ops::Deref, sync::Arc};
 
 use tracing::{event, Level};
 
 use crate::{
     env::Env,
-    error,
-    types::{builtin::math, Builtin, Lambda, List, Map, StaticFunc},
-    ErrType, MalErr, Res, Val,
+    types::{Function, List, Map},
+    MalErr, Res, Val,
 };
 
 pub fn eval(envt: &Arc<Env>, ast: Val) -> Res {
@@ -81,6 +76,9 @@ fn apply(envt: &Arc<Env>, list: Arc<List>) -> Res {
         Val::Symbol(s) => match s.deref() {
             "def!" => return define(envt, rest.car()?, eval(envt, rest.cdr()?.car()?)?),
             "let" | "let*" => return do_let(&Env::child_of(envt), rest),
+            "do" => return do_do(envt, rest),
+            "if" => return do_if(envt, rest),
+            "fn" | "fn*" => return make_closure(envt, rest),
             _ => {}
         },
         _ => {}
@@ -89,11 +87,12 @@ fn apply(envt: &Arc<Env>, list: Arc<List>) -> Res {
     let list = eval_ast(envt, list.into())?.unwrap_list()?;
     let func = list.car()?.unwrap_func()?;
     let rest = list.cdr()?;
-    func.call(rest)
+    func.call(envt, rest)
 }
 
 fn define(envt: &Arc<Env>, key: Val, val: Val) -> Res {
-    envt.set(&key.unwrap_symbol()?, val.clone());
+    let key = key.unwrap_symbol()?;
+    envt.set(&key, val.clone());
     Ok(val)
 }
 
@@ -121,4 +120,55 @@ fn do_let(new_envt: &Arc<Env>, rest: Arc<List>) -> Res {
     }
 
     eval(new_envt, rest.next().unwrap_or(Val::Nil))
+}
+
+fn do_do(envt: &Arc<Env>, list: Arc<List>) -> Res {
+    let mut forms = list.clone();
+    while let Some(val) = forms.next() {
+        if forms.is_empty() {
+            return eval(envt, val);
+        } else {
+            let _ = eval(envt, val)?;
+        }
+    }
+    Ok(Val::Nil)
+}
+
+fn do_if(envt: &Arc<Env>, list: Arc<List>) -> Res {
+    let mut list = list.clone();
+    let cond = eval(envt, list.pop()?)?;
+    match cond {
+        Val::Nil | Val::False => {
+            let _ = list.pop()?;
+            if let Some(val) = list.next() {
+                eval(envt, val)
+            } else {
+                Ok(Val::Nil)
+            }
+        }
+        _ => eval(envt, list.pop()?),
+    }
+}
+
+fn make_closure(envt: &Arc<Env>, list: Arc<List>) -> Res {
+    let mut list = list.clone();
+    let mut args: Vec<Arc<str>> = Vec::new();
+    match list.pop()? {
+        Val::Nil => {}
+        Val::Symbol(s) => args.push(s.clone()),
+        Val::List(mut l) => {
+            while let Some(v) = l.next() {
+                args.push(v.unwrap_symbol()?.clone());
+            }
+        }
+        Val::Vector(v) => {
+            for val in v.read().unwrap().iter() {
+                args.push(val.unwrap_symbol()?);
+            }
+        }
+        x => return MalErr::rarg(format!("expected an argument list: {}", &x)),
+    };
+
+    let form = list.pop()?;
+    Ok(Function::define(args, envt, form).into())
 }

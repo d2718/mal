@@ -1,8 +1,11 @@
 /*!
 Built-in arithmetic functions.
 */
-use std::ops::{Add, Div, Mul, Sub};
 use std::sync::Arc;
+use std::{
+    cmp::Ordering,
+    ops::{Add, Div, Mul, Sub},
+};
 
 use ordered_float::OrderedFloat;
 
@@ -20,6 +23,10 @@ pub const BUILTINS: &[(&str, &StaticFunc)] = &[
     ("div", &int_div),
     ("mod", &int_mod),
     ("sqrt", &sqrt),
+    ("<", &less_than),
+    ("<=", &less_or_eq),
+    (">", &greater_than),
+    (">=", &greater_or_eq),
 ];
 
 fn binop<F, G>(f: F, g: G, a: Val, b: Val) -> Res
@@ -41,6 +48,35 @@ where
     };
 
     Ok(v)
+}
+
+fn bincmp(name: &str, args: &Arc<List>, ok: &[Ordering]) -> Res {
+    let mut args = args.clone();
+    let (a, b) = match (args.next(), args.next()) {
+        (Some(a), Some(b)) => (a, b),
+        _ => {
+            return Err(err(
+                ErrType::Arg,
+                format!("{} requires two arguments", name),
+            ))
+        }
+    };
+
+    let (x, y): (f64, f64) = match (a.clone().try_into(), b.clone().try_into()) {
+        (Ok(x), Ok(y)) => (x, y),
+        _ => {
+            return Err(err(
+                ErrType::Type,
+                format!("cannot compare {} with {}", &a, &b),
+            ))
+        }
+    };
+
+    let b = match x.partial_cmp(&y) {
+        Some(b) => b,
+        None => return Ok(false.into()),
+    };
+    Ok(ok.contains(&b).into())
 }
 
 pub fn add(args: Arc<List>) -> Res {
@@ -143,4 +179,17 @@ pub fn sqrt(args: Arc<List>) -> Res {
     }
 
     Ok(arg.sqrt().into())
+}
+
+pub fn less_than(args: Arc<List>) -> Res {
+    bincmp("<", &args, &[Ordering::Less])
+}
+pub fn less_or_eq(args: Arc<List>) -> Res {
+    bincmp("<=", &args, &[Ordering::Less, Ordering::Equal])
+}
+pub fn greater_than(args: Arc<List>) -> Res {
+    bincmp(">", &args, &[Ordering::Greater])
+}
+pub fn greater_or_eq(args: Arc<List>) -> Res {
+    bincmp(">=", &args, &[Ordering::Greater, Ordering::Equal])
 }

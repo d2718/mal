@@ -24,6 +24,14 @@ impl Env {
         .into()
     }
 
+    pub fn binding(outer: &Arc<Env>, bindings: Vec<(Arc<str>, Val)>) -> Arc<Env> {
+        let envt = Env::child_of(outer);
+        for (k, v) in bindings.into_iter() {
+            envt.set(&k, v);
+        }
+        envt
+    }
+
     fn self_get(self: &Arc<Env>, key: &str) -> Option<Val> {
         self.map.read().unwrap().get(key).map(|v| v.clone())
     }
@@ -53,11 +61,10 @@ impl Env {
     }
 
     pub fn default() -> Arc<Env> {
-        use crate::types::builtin::math;
-        use crate::types::Builtin;
+        use crate::types::{builtin, builtin::math, Builtin};
 
         let mut map = BTreeMap::default();
-        for (name, func) in math::BUILTINS.iter() {
+        for (name, func) in builtin::BUILTINS.iter().chain(math::BUILTINS.iter()) {
             let f = Builtin::new(name, func);
             let name: Box<str> = (*name).into();
             map.insert(name, f.into());

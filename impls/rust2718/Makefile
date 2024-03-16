@@ -15,6 +15,10 @@ step2_eval: Cargo.toml src/* src/bin/step2_eval.rs
 step3_env: Cargo.toml src/* src/bin/step3_env.rs
 	cargo build --bin step3_env
 	cp target/debug/step3_env ./
+
+step4_if_fn_do: Cargo.toml src/* src/*/*.rs src/bin/step4_if_fn_do.rs
+	cargo build --bin step4_if_fn_do
+	cp target/debug/step4_if_fn_do ./
 	
 tidy:
 	rm step[0-9]_*

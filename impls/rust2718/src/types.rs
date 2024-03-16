@@ -2,7 +2,7 @@
 Types
 */
 use std::{
-    collections::BTreeMap,
+    convert::TryFrom,
     fmt::{Debug, Display, Formatter},
     ops::Deref,
     sync::{Arc, RwLock},
@@ -14,11 +14,11 @@ pub mod builtin;
 mod lambda;
 mod list;
 mod map;
-pub use lambda::{Builtin, Lambda, StaticFunc};
+pub use lambda::{Builtin, Function, Lambda, StaticFunc};
 pub use list::List;
 pub use map::Map;
 
-use crate::MalErr;
+use crate::{error::err, ErrType, MalErr};
 
 #[derive(Clone, Debug)]
 pub enum Val {
@@ -72,8 +72,8 @@ impl Display for Val {
 
         match self {
             Nil => write!(f, "nil"),
-            True => write!(f, "T"),
-            False => write!(f, "F"),
+            True => write!(f, "true"),
+            False => write!(f, "false"),
             Int(n) => write!(f, "{}", &n),
             Float(x) => write!(f, "{}", &x),
             String(ref s) => write!(f, "\"{}\"", s),
@@ -154,6 +154,12 @@ impl From<f64> for Val {
     }
 }
 
+impl From<String> for Val {
+    fn from(s: String) -> Val {
+        Val::String(s.into())
+    }
+}
+
 impl From<Arc<List>> for Val {
     fn from(a: Arc<List>) -> Val {
         Val::List(a.clone())
@@ -181,5 +187,45 @@ impl From<OrderedFloat<f64>> for Val {
 impl From<Builtin> for Val {
     fn from(b: Builtin) -> Val {
         Val::Func(Arc::new(b))
+    }
+}
+
+impl From<Function> for Val {
+    fn from(f: Function) -> Val {
+        Val::Func(Arc::new(f))
+    }
+}
+
+impl TryFrom<Val> for f64 {
+    type Error = MalErr;
+
+    fn try_from(v: Val) -> Result<f64, MalErr> {
+        match v {
+            Val::Int(n) => Ok(n as f64),
+            Val::Float(x) => Ok(x.into()),
+            v => Err(err(
+                ErrType::Type,
+                format!("{} cannot be converted to floating-point", v),
+            )),
+        }
+    }
+}
+
+impl PartialEq for Val {
+    fn eq(&self, other: &Self) -> bool {
+        let b = match (self, other) {
+            (Val::Nil, Val::Nil) => true,
+            (Val::True, Val::True) => true,
+            (Val::False, Val::False) => true,
+            (Val::Int(n), Val::Int(m)) => n == m,
+            (Val::Float(x), Val::Float(y)) => x == y,
+            (Val::String(s), Val::String(t)) => s == t,
+            (Val::Symbol(s), Val::Symbol(t)) => s == t,
+            (Val::List(a), Val::List(b)) => a == b,
+            (Val::Vector(u), Val::Vector(v)) => *u.read().unwrap() == *v.read().unwrap(),
+            (Val::Map(m), Val::Map(n)) => m == n,
+            _ => false,
+        };
+        b.into()
     }
 }

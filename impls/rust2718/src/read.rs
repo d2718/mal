@@ -169,8 +169,8 @@ fn read_atom(obj: String) -> Result<Val, MalErr> {
 
     match obj.as_str() {
         "nil" | "Nil" | "NIL" => return Ok(Val::Nil),
-        "t" | "T" => return Ok(Val::True),
-        "f" | "F" => return Ok(Val::False),
+        "true" | "True" | "TRUE" => return Ok(Val::True),
+        "false" | "False" | "FALSE" => return Ok(Val::False),
         _ => {}
     }
 

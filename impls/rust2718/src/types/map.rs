@@ -9,11 +9,7 @@ use std::{
 
 use ordered_float::OrderedFloat;
 
-use crate::{
-    error::err,
-    types::{Lambda, List},
-    ErrType, MalErr, Res, Val,
-};
+use crate::{error::err, ErrType, MalErr, Res, Val};
 
 #[derive(Clone, Debug, PartialOrd, PartialEq, Ord, Eq)]
 enum Key {
@@ -87,6 +83,24 @@ impl Map {
         }
 
         MapIter { values }
+    }
+}
+
+impl PartialEq for Map {
+    fn eq(&self, other: &Self) -> bool {
+        let s = self.map.read().unwrap();
+        let t = other.map.read().unwrap();
+        if s.len() != t.len() {
+            return false;
+        }
+
+        for (k, v) in s.iter() {
+            if t.get(k) != Some(v) {
+                return false;
+            }
+        }
+
+        true
     }
 }
 

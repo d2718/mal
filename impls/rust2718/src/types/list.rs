@@ -3,13 +3,9 @@ The classic singly-linked list.
 */
 use std::{ops::Deref, sync::Arc};
 
-use crate::{
-    error::err,
-    types::{Lambda, Val},
-    ErrType, MalErr, Res,
-};
+use crate::{error::err, types::Val, ErrType, MalErr, Res};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum List {
     Node { val: Val, next: Arc<List> },
     Nil,
@@ -22,6 +18,14 @@ impl List {
 
     pub fn is_empty(self: &Arc<List>) -> bool {
         matches!(&(**self), List::Nil)
+    }
+
+    pub fn is_last(self: &Arc<List>) -> bool {
+        if let List::Node { next, .. } = self.deref() {
+            next.is_empty()
+        } else {
+            false
+        }
     }
 
     pub fn cons<V>(self: &Arc<List>, v: V) -> Arc<List>
@@ -70,6 +74,15 @@ impl List {
         }
     }
 
+    pub fn len(self: &Arc<List>) -> i64 {
+        let mut list = self.clone();
+        let mut n = 0i64;
+        while list.next().is_some() {
+            n += 1;
+        }
+        n
+    }
+
     pub fn get_n_args(self: &mut Arc<List>, n: usize) -> Result<Vec<Val>, MalErr> {
         let mut v: Vec<Val> = Vec::with_capacity(n);
         for _ in 0..n {
@@ -80,23 +93,6 @@ impl List {
         }
 
         Ok(v)
-    }
-
-    pub fn map<L: Lambda>(self: &Arc<List>, f: &dyn Lambda) -> Result<Arc<List>, MalErr> {
-        let mut a = self.clone();
-        let mut temp: Vec<Val> = Vec::new();
-
-        while !a.is_empty() {
-            temp.push(f.call(a.clone())?);
-            a = a.cdr()?;
-        }
-
-        let mut a = List::empty();
-        while let Some(v) = temp.pop() {
-            a = a.cons(v);
-        }
-
-        Ok(a)
     }
 
     pub fn from_val(v: Val) -> Arc<List> {
