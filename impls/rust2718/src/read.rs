@@ -1,16 +1,16 @@
 /*!
 Reading input for the interpreter.
 */
-use std::{collections::VecDeque, sync::Arc};
+use std::{sync::{mpsc::{Sender, Receiver, channel}, Arc}};
 
 use once_cell::sync::Lazy;
 use regex::{bytes, Regex};
 use tracing::{event, instrument, Level};
 
 use crate::{
-    error,
+    eval::eval,
     types::{List, Map},
-    ErrType, MalErr, Val,
+    MalErr, Val, Res, env::Env,
 };
 
 static TOKENIZER: Lazy<Regex> = Lazy::new(|| {
@@ -54,45 +54,68 @@ impl From<&str> for Token {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct Reader {
-    tokens: VecDeque<Token>,
+#[derive(Debug)]
+pub struct Tokenizer {
+    input: rustyline::DefaultEditor,
+    output: Sender<Token>,
 }
 
-impl Reader {
+impl Tokenizer {
     #[instrument]
-    pub fn tokenize(&mut self, text: &str) {
-        for tok in TOKENIZER.captures_iter(text).filter_map(|t| {
+    pub fn read_line(&mut self) {
+        match self.input.readline("user> ") {
+            Ok(line) => self.tokenize(line),
+            Err(e) => {
+                println!("exiting: {}", &e);
+                std::process::exit(0);
+            }
+        }
+    }
+    
+    fn tokenize(&mut self, line: String) {
+        for tok in TOKENIZER.captures_iter(&line).filter_map(|t| {
             match t.get(1).map(|m| m.as_str().trim()) {
                 None | Some("") => None,
                 Some(s) => Some(Token::from(s)),
             }
         }) {
             if !matches!(&tok, &Token::Comment(_)) {
-                self.tokens.push_back(tok);
+                self.output.send(tok).unwrap();
             }
         }
     }
+}
 
-    pub fn peek(&self) -> Option<&Token> {
-        self.tokens.front()
+#[derive(Debug)]
+pub struct Reader {
+    input: Receiver<Token>,
+    current: Option<Token>,
+}
+
+impl Reader {
+    pub fn peek(&mut self) -> &Token {
+        if self.current.is_none() {
+            let tok = self.input.recv().unwrap();
+            let _ = self.current.insert(tok);
+        }
+        &self.current.as_ref().unwrap()
     }
 
-    pub fn next(&mut self) -> Option<Token> {
-        self.tokens.pop_front()
+    pub fn next(&mut self) -> Token {
+        match self.current.take() {
+            Some(t) => t,
+            None => self.input.recv().unwrap()
+        }
     }
 
     #[instrument]
-    pub fn read_form(&mut self) -> Result<Option<Val>, MalErr> {
-        let tok = match self.next() {
-            Some(tok) => tok,
-            None => return Ok(None),
-        };
+    pub fn read_form(&mut self) -> Res {
+        let tok = self.next();
         event!(Level::DEBUG, "next token: {:?}", &tok);
 
         let val = match tok {
             Token::OpenParen => {
-                let mut vals = self.read_until(Token::CloseParen)?;
+                let mut vals = self.read_until(&Token::CloseParen)?;
                 let mut list = List::empty();
                 while let Some(val) = vals.pop() {
                     list = list.cons(val);
@@ -100,41 +123,34 @@ impl Reader {
                 Val::List(list)
             }
             Token::OpenBracket => {
-                let vals = self.read_until(Token::CloseBracket)?;
+                let vals = self.read_until(&Token::CloseBracket)?;
                 Val::vec(vals)
             }
             Token::OpenBrace => {
                 let map_arc = self.read_map()?;
                 Val::Map(map_arc)
             }
-            Token::Comment(_) => return Ok(None),
+            Token::Comment(_) => return Ok(Val::Nil), // This shouldn't happen.
             Token::Obj(obj) => read_atom(obj)?,
             Token::SingleQuote => {
-                let quoted = self
-                    .read_form()?
-                    .ok_or_else(|| error::err(ErrType::Read, "unexpected end of input"))?;
+                let quoted = self.read_form()?;
                 Val::List(List::empty().cons(quoted).cons(Val::Symbol("quote".into())))
             }
             x => return MalErr::rread(format!("unexpected {:?}", &x)),
         };
 
-        Ok(Some(val))
+        Ok(val)
     }
 
-    fn read_until(&mut self, zigamorph: Token) -> Result<Vec<Val>, MalErr> {
+    fn read_until(&mut self, zigamorph: &Token) -> Result<Vec<Val>, MalErr> {
         let mut vals: Vec<Val> = Vec::new();
-        let target = Some(&zigamorph);
 
         loop {
-            if self.peek() == target {
+            if self.peek() == zigamorph {
                 let _ = self.next();
                 return Ok(vals);
             }
             let val = self.read_form()?;
-            let val = match val {
-                None => return MalErr::rread("unexpected end of input"),
-                Some(val) => val,
-            };
             vals.push(val);
         }
     }
@@ -143,18 +159,12 @@ impl Reader {
         let map = Arc::new(Map::default());
 
         loop {
-            if self.peek() == Some(&Token::CloseBrace) {
+            if self.peek() == &Token::CloseBrace {
                 let _ = self.next();
                 return Ok(map);
             }
-            let key = match self.read_form()? {
-                None => return MalErr::rread("unexpected end of input"),
-                Some(k) => k,
-            };
-            let val = match self.read_form()? {
-                None => return MalErr::rread("unexpected end of input"),
-                Some(v) => v,
-            };
+            let key = self.read_form()?;
+            let val = self.read_form()?;
             let _ = map.insert(key, val)?;
         }
     }
@@ -227,4 +237,41 @@ fn make_string(chars: &str) -> Result<Option<String>, MalErr> {
     let s = String::from_utf8(v).unwrap();
 
     Ok(Some(s))
+}
+
+pub fn run() {
+    use rustyline::{config::EditMode, DefaultEditor};
+
+    let rl_conf = rustyline::Config::builder()
+        .auto_add_history(true)
+        .edit_mode(EditMode::Emacs)
+        .build();
+    let rl = DefaultEditor::with_config(rl_conf).unwrap();
+    
+    let (tx, rx) = channel::<Token>();
+
+    let mut tokenizer = Tokenizer {
+        input: rl,
+        output: tx,
+    };
+
+    let mut reader = Reader {
+        input: rx,
+        current: None,
+    };
+
+    std::thread::spawn(move || {
+        loop {
+            tokenizer.read_line();
+        }
+    });
+
+    let envt = Env::default();
+    loop {
+        match reader.read_form().and_then(|v| eval(&envt, v)) {
+            Ok(val) => println!("{}", &val),
+            Err(e) => println!("{:?}", &e), 
+        }
+    }
+
 }
