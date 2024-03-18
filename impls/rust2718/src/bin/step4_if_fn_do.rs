@@ -1,4 +1,3 @@
-
 use rust2718::read::run;
 
 fn start_logging() {

@@ -4,9 +4,9 @@ Builtin functions.
 use std::sync::Arc;
 
 use crate::{
-    error::err,
+    error::{err, rerr},
     types::{List, StaticFunc},
-    ErrType, MalErr, Res, Val,
+    Res, Val,
 };
 
 pub mod math;
@@ -31,7 +31,7 @@ pub fn count(args: Arc<List>) -> Res {
     match args.car() {
         Ok(Val::List(list)) => Ok(list.len().into()),
         Ok(Val::Nil) => Ok(0.into()),
-        _ => Err(err(ErrType::Type, "count requires a countable argument")),
+        _ => Err(err("count requires a countable argument")),
     }
 }
 
@@ -47,7 +47,7 @@ pub fn equal(args: Arc<List>) -> Res {
     let mut args = args.clone();
     let (a, b) = match (args.next(), args.next()) {
         (Some(a), Some(b)) => (a, b),
-        _ => return MalErr::rarg("= requires two arguments"),
+        _ => return rerr("= requires two arguments"),
     };
 
     Ok((a == b).into())
@@ -58,6 +58,6 @@ pub fn prn(args: Arc<List>) -> Res {
     while let Some(a) = args.next() {
         print!(" {}", a);
     }
-    println!("");
+    println!();
     Ok(Val::Nil)
 }

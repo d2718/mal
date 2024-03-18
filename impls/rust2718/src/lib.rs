@@ -10,7 +10,7 @@ pub mod eval;
 pub mod read;
 pub mod types;
 
-pub use crate::error::{ErrType, MalErr};
+pub use crate::error::MalErr;
 pub use crate::types::Val;
 
 pub type Res = Result<Val, MalErr>;

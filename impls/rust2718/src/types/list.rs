@@ -3,7 +3,7 @@ The classic singly-linked list.
 */
 use std::{ops::Deref, sync::Arc};
 
-use crate::{error::err, types::Val, ErrType, MalErr, Res};
+use crate::{error::rerr, types::Val, MalErr, Res};
 
 #[derive(Debug, PartialEq)]
 pub enum List {
@@ -40,21 +40,21 @@ impl List {
 
     pub fn car(self: &Arc<List>) -> Res {
         match self.deref() {
-            List::Nil => MalErr::rarg("car expects a non-empty list"),
+            List::Nil => rerr("car expects a non-empty list"),
             List::Node { val, .. } => Ok(val.clone()),
         }
     }
 
     pub fn cdr(self: &Arc<List>) -> Result<Arc<List>, MalErr> {
         match self.deref() {
-            List::Nil => MalErr::rarg("cdr expects a non-empty list"),
+            List::Nil => rerr("cdr expects a non-empty list"),
             List::Node { next, .. } => Ok(next.clone()),
         }
     }
 
     pub fn next(self: &mut Arc<List>) -> Option<Val> {
         match self.deref().deref() {
-            List::Nil => return None,
+            List::Nil => None,
             List::Node { next, val } => {
                 let rval = val.clone();
                 *self = next.clone();
@@ -65,7 +65,7 @@ impl List {
 
     pub fn pop(self: &mut Arc<List>) -> Res {
         match self.deref().deref() {
-            List::Nil => Err(err(ErrType::Type, "list is empty")),
+            List::Nil => rerr("list is empty"),
             List::Node { next, val } => {
                 let rval = val.clone();
                 *self = next.clone();
@@ -88,7 +88,7 @@ impl List {
         for _ in 0..n {
             match self.next() {
                 Some(val) => v.push(val),
-                None => return MalErr::rarg("not enough arguments"),
+                None => return rerr("not enough arguments"),
             }
         }
 

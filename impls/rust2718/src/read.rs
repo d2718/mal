@@ -1,16 +1,21 @@
 /*!
 Reading input for the interpreter.
 */
-use std::{sync::{mpsc::{Sender, Receiver, channel}, Arc}};
+use std::sync::{
+    mpsc::{channel, Receiver, Sender},
+    Arc,
+};
 
 use once_cell::sync::Lazy;
 use regex::{bytes, Regex};
 use tracing::{event, instrument, Level};
 
 use crate::{
+    env::Env,
+    error::rerr,
     eval::eval,
     types::{List, Map},
-    MalErr, Val, Res, env::Env,
+    MalErr, Res, Val,
 };
 
 static TOKENIZER: Lazy<Regex> = Lazy::new(|| {
@@ -71,7 +76,7 @@ impl Tokenizer {
             }
         }
     }
-    
+
     fn tokenize(&mut self, line: String) {
         for tok in TOKENIZER.captures_iter(&line).filter_map(|t| {
             match t.get(1).map(|m| m.as_str().trim()) {
@@ -98,13 +103,13 @@ impl Reader {
             let tok = self.input.recv().unwrap();
             let _ = self.current.insert(tok);
         }
-        &self.current.as_ref().unwrap()
+        self.current.as_ref().unwrap()
     }
 
     pub fn next(&mut self) -> Token {
         match self.current.take() {
             Some(t) => t,
-            None => self.input.recv().unwrap()
+            None => self.input.recv().unwrap(),
         }
     }
 
@@ -136,7 +141,7 @@ impl Reader {
                 let quoted = self.read_form()?;
                 Val::List(List::empty().cons(quoted).cons(Val::Symbol("quote".into())))
             }
-            x => return MalErr::rread(format!("unexpected {:?}", &x)),
+            x => return rerr(format!("unexpected {:?}", &x)),
         };
 
         Ok(val)
@@ -201,7 +206,7 @@ fn make_string(chars: &str) -> Result<Option<String>, MalErr> {
     }
 
     if bytes.len() < 2 || bytes.last() != Some(&b'"') {
-        return MalErr::rread("unbalanced string");
+        return rerr("unbalanced string");
     }
 
     let sub_bytes = &bytes[1..(bytes.len() - 1)];
@@ -216,7 +221,7 @@ fn make_string(chars: &str) -> Result<Option<String>, MalErr> {
                 unescape = true;
                 break;
             } else {
-                return MalErr::rread("unbalanced string");
+                return rerr("unbalanced string");
             }
         }
     }
@@ -247,7 +252,7 @@ pub fn run() {
         .edit_mode(EditMode::Emacs)
         .build();
     let rl = DefaultEditor::with_config(rl_conf).unwrap();
-    
+
     let (tx, rx) = channel::<Token>();
 
     let mut tokenizer = Tokenizer {
@@ -260,18 +265,15 @@ pub fn run() {
         current: None,
     };
 
-    std::thread::spawn(move || {
-        loop {
-            tokenizer.read_line();
-        }
+    std::thread::spawn(move || loop {
+        tokenizer.read_line();
     });
 
     let envt = Env::default();
     loop {
         match reader.read_form().and_then(|v| eval(&envt, v)) {
             Ok(val) => println!("{}", &val),
-            Err(e) => println!("{:?}", &e), 
+            Err(e) => println!("{}", &e),
         }
     }
-
 }

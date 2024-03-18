@@ -10,9 +10,9 @@ use std::{
 use ordered_float::OrderedFloat;
 
 use crate::{
-    error::err,
+    error::{err, rerr},
     types::{List, StaticFunc},
-    ErrType, MalErr, Res, Val,
+    Res, Val,
 };
 
 pub const BUILTINS: &[(&str, &StaticFunc)] = &[
@@ -39,37 +39,22 @@ where
         (Val::Int(n), Val::Float(y)) => g(n as f64, y.into()).into(),
         (Val::Float(x), Val::Int(m)) => g(x.into(), m as f64).into(),
         (Val::Float(x), Val::Float(y)) => g(x.into(), y.into()).into(),
-        (x, y) => {
-            return Err(err(
-                ErrType::Type,
-                format!("attempt to perform arithmetic with {} & {}", x, y),
-            ))
-        }
+        _ => return rerr("numeric arguments required"),
     };
 
     Ok(v)
 }
 
-fn bincmp(name: &str, args: &Arc<List>, ok: &[Ordering]) -> Res {
+fn bincmp(args: &Arc<List>, ok: &[Ordering]) -> Res {
     let mut args = args.clone();
     let (a, b) = match (args.next(), args.next()) {
         (Some(a), Some(b)) => (a, b),
-        _ => {
-            return Err(err(
-                ErrType::Arg,
-                format!("{} requires two arguments", name),
-            ))
-        }
+        _ => return rerr("requires two arguments"),
     };
 
     let (x, y): (f64, f64) = match (a.clone().try_into(), b.clone().try_into()) {
         (Ok(x), Ok(y)) => (x, y),
-        _ => {
-            return Err(err(
-                ErrType::Type,
-                format!("cannot compare {} with {}", &a, &b),
-            ))
-        }
+        _ => return rerr("incomparable values"),
     };
 
     let b = match x.partial_cmp(&y) {
@@ -102,7 +87,7 @@ pub fn sub(args: Arc<List>) -> Res {
 
     let mut r: Val = args
         .next()
-        .ok_or_else(|| err(ErrType::Arg, "- requires at least one argument"))?;
+        .ok_or_else(|| err("requires at least one argument"))?;
 
     while let Some(v) = args.next() {
         r = binop(Sub::sub, Sub::sub, r, v)?;
@@ -115,15 +100,16 @@ pub fn div(args: Arc<List>) -> Res {
     let mut args = args.clone();
     let num = args
         .next()
-        .ok_or_else(|| err(ErrType::Arg, "/ requires at least one argument"))?;
+        .ok_or_else(|| err("requires at least one argument"))?;
     let den = match args.next() {
         None => return Ok(num),
         Some(v) => v,
     };
 
     let v: Val = match (num, den) {
-        (_, Val::Int(0)) | (_, Val::Float(OrderedFloat(0.0))) => {
-            return Err(err(ErrType::Arg, "division by zero"))
+        (_, Val::Int(0)) => return rerr("division by zero"),
+        (_, Val::Float(OrderedFloat(x))) if x == 0.0 => {
+            return rerr("division by zero");
         }
         (Val::Int(n), Val::Int(m)) if n % m == 0 => (n / m).into(),
         (Val::Int(n), Val::Int(m)) => (n as f64 / m as f64).into(),
@@ -135,33 +121,25 @@ pub fn div(args: Arc<List>) -> Res {
 
 pub fn int_div(args: Arc<List>) -> Res {
     let mut args = args.clone();
-    let dividend = args
-        .next()
-        .ok_or_else(|| MalErr::arg(format!("div requires two arguments")))?;
-    let divisor = args
-        .next()
-        .ok_or_else(|| MalErr::arg(format!("div requires two arguments")))?;
+    let dividend = args.next().ok_or_else(|| err("requires two arguments"))?;
+    let divisor = args.next().ok_or_else(|| err("requires two arguments"))?;
 
     match (dividend, divisor) {
-        (_, Val::Int(0)) => Err(MalErr::arg("division by zero")),
+        (_, Val::Int(0)) => rerr("division by zero"),
         (Val::Int(n), Val::Int(m)) => Ok((n / m).into()),
-        _ => Err(MalErr::arg("div requires integer arguments")),
+        _ => rerr("requires integer arguments"),
     }
 }
 
 pub fn int_mod(args: Arc<List>) -> Res {
     let mut args = args.clone();
-    let dividend = args
-        .next()
-        .ok_or_else(|| MalErr::arg("mod requires two arguments"))?;
-    let divisor = args
-        .next()
-        .ok_or_else(|| MalErr::arg("mod requires two arguments"))?;
+    let dividend = args.next().ok_or_else(|| err("requires two arguments"))?;
+    let divisor = args.next().ok_or_else(|| err("requires two arguments"))?;
 
     match (dividend, divisor) {
-        (_, Val::Int(0)) => Err(MalErr::arg("division by zero")),
+        (_, Val::Int(0)) => rerr("division by zero"),
         (Val::Int(n), Val::Int(m)) => Ok((n % m).into()),
-        _ => Err(MalErr::arg("mod requires integer arguments")),
+        _ => rerr("requires integer arguments"),
     }
 }
 
@@ -171,25 +149,25 @@ pub fn sqrt(args: Arc<List>) -> Res {
     let arg: f64 = match arg {
         Val::Int(n) => n as f64,
         Val::Float(x) => x.into(),
-        _ => MalErr::rarg("sqrt requires numeric argument")?,
+        _ => return rerr("requires numeric argument"),
     };
 
     if arg < 0.0 {
-        MalErr::rarg("sqrt requres non-negative argument")?;
+        return rerr("requres non-negative argument");
     }
 
     Ok(arg.sqrt().into())
 }
 
 pub fn less_than(args: Arc<List>) -> Res {
-    bincmp("<", &args, &[Ordering::Less])
+    bincmp(&args, &[Ordering::Less])
 }
 pub fn less_or_eq(args: Arc<List>) -> Res {
-    bincmp("<=", &args, &[Ordering::Less, Ordering::Equal])
+    bincmp(&args, &[Ordering::Less, Ordering::Equal])
 }
 pub fn greater_than(args: Arc<List>) -> Res {
-    bincmp(">", &args, &[Ordering::Greater])
+    bincmp(&args, &[Ordering::Greater])
 }
 pub fn greater_or_eq(args: Arc<List>) -> Res {
-    bincmp(">=", &args, &[Ordering::Greater, Ordering::Equal])
+    bincmp(&args, &[Ordering::Greater, Ordering::Equal])
 }

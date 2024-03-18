@@ -9,8 +9,9 @@ use std::{
 
 use ordered_float::OrderedFloat;
 
-use crate::{error::err, ErrType, MalErr, Res, Val};
+use crate::{error::rerr, MalErr, Res, Val};
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, PartialOrd, PartialEq, Ord, Eq)]
 enum Key {
     Int(i64),
@@ -41,7 +42,7 @@ impl TryFrom<Val> for Key {
             Val::Float(x) => Key::Float(x),
             Val::String(a) => Key::String(a.clone()),
             Val::Symbol(a) => Key::Symbol(a.clone()),
-            x => return Err(err(ErrType::Type, format!("{:?} cannot be a Map key", x))),
+            _ => return rerr("invalid Map key"),
         };
         Ok(key)
     }
@@ -70,7 +71,7 @@ impl Map {
     pub fn get(self: &Arc<Map>, k: Val) -> Option<Val> {
         let k = Key::try_from(k).ok()?;
 
-        self.map.read().unwrap().get(&k).map(|v| v.clone())
+        self.map.read().unwrap().get(&k).cloned()
     }
 
     pub fn iter(self: &Arc<Map>) -> MapIter {

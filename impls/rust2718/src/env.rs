@@ -7,7 +7,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use crate::{error::err, types::Val, ErrType, Res};
+use crate::{error::err, types::Val, Res};
 
 #[derive(Debug)]
 pub struct Env {
@@ -33,16 +33,16 @@ impl Env {
     }
 
     fn self_get(self: &Arc<Env>, key: &str) -> Option<Val> {
-        self.map.read().unwrap().get(key).map(|v| v.clone())
+        self.map.read().unwrap().get(key).cloned()
     }
 
     pub fn get<S: AsRef<str>>(self: &Arc<Env>, s: S) -> Res {
         let s = s.as_ref();
         let envt = self
             .find(s)
-            .ok_or_else(|| err(ErrType::Eval, format!("'{}' not found", s)))?;
+            .ok_or_else(|| err(format!("'{}' not found", s)))?;
         envt.self_get(s)
-            .ok_or_else(|| err(ErrType::Eval, format!("'{}' not found", s)))
+            .ok_or_else(|| err(format!("'{}' not found", s)))
     }
 
     pub fn find(self: &Arc<Env>, key: &str) -> Option<Arc<Env>> {

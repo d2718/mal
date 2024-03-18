@@ -1,57 +1,62 @@
 /*!
 Our error type.
 */
-use std::borrow::Cow;
+use std::{
+    borrow::Cow,
+    fmt::{Display, Formatter},
+};
 
-#[derive(Debug)]
-pub enum ErrType {
-    Read,
-    Arg,
-    Type,
-    Eval,
-}
+use crate::types::Val;
 
 #[derive(Debug)]
 pub struct MalErr {
-    pub flavor: ErrType,
     pub msg: Cow<'static, str>,
+    pub context: Vec<Cow<'static, str>>,
 }
 
 impl MalErr {
-    pub fn rread<C, T>(msg: C) -> Result<T, MalErr>
+    pub fn wrap<C>(self, msg: C) -> MalErr
     where
         Cow<'static, str>: From<C>,
     {
-        Err(MalErr {
-            flavor: ErrType::Read,
-            msg: msg.into(),
-        })
+        let mut e = self;
+        e.context.push(msg.into());
+        e
     }
 
-    pub fn arg<C>(msg: C) -> MalErr
-    where
-        Cow<'static, str>: From<C>,
-    {
-        MalErr {
-            flavor: ErrType::Arg,
-            msg: msg.into(),
+    pub fn in_form(res: Result<Val, MalErr>, val: Val) -> Result<Val, MalErr> {
+        match res {
+            Ok(v) => Ok(v),
+            Err(mut e) => {
+                e.context.push(format!("in form {}", &val).into());
+                Err(e)
+            }
         }
-    }
-
-    pub fn rarg<C, T>(msg: C) -> Result<T, MalErr>
-    where
-        Cow<'static, str>: From<C>,
-    {
-        Err(MalErr::arg(msg))
     }
 }
 
-pub fn err<C>(t: ErrType, msg: C) -> MalErr
+pub fn err<C>(msg: C) -> MalErr
 where
     Cow<'static, str>: From<C>,
 {
     MalErr {
-        flavor: t,
         msg: msg.into(),
+        context: Vec::new(),
+    }
+}
+
+pub fn rerr<C, T>(msg: C) -> Result<T, MalErr>
+where
+    Cow<'static, str>: From<C>,
+{
+    Err(err(msg))
+}
+
+impl Display for MalErr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for line in self.context.iter().rev() {
+            writeln!(f, "! {}", line)?;
+        }
+        writeln!(f, "ERROR: {}", &self.msg)
     }
 }

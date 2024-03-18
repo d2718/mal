@@ -8,6 +8,7 @@ use tracing::{event, Level};
 
 use crate::{
     env::Env,
+    error::rerr,
     types::{Function, List, Map},
     MalErr, Res, Val,
 };
@@ -15,10 +16,11 @@ use crate::{
 pub fn eval(envt: &Arc<Env>, ast: Val) -> Res {
     event!(Level::TRACE, "eval( {:?}, {:?} )", &envt, &ast);
 
-    match ast {
+    let res = match ast.clone() {
         Val::List(a) => apply(envt, a),
         x => eval_ast(envt, x),
-    }
+    };
+    MalErr::in_form(res, ast)
 }
 
 pub fn eval_ast(envt: &Arc<Env>, ast: Val) -> Res {
@@ -111,12 +113,12 @@ fn do_let(new_envt: &Arc<Env>, rest: Arc<List>) -> Res {
             for chunk in a.read().unwrap().chunks(2) {
                 let (key, val) = match chunk {
                     [k, v] => (k.unwrap_symbol()?, eval(new_envt, v.clone())?),
-                    _ => return MalErr::rarg("binding for must contain even number of elements"),
+                    _ => return rerr("binding form must contain even number of elements"),
                 };
                 new_envt.set(&key, val);
             }
         }
-        _ => return MalErr::rarg("binding form must be a list or a vector"),
+        _ => return rerr("binding form must be a list or a vector"),
     }
 
     eval(new_envt, rest.next().unwrap_or(Val::Nil))
@@ -166,7 +168,7 @@ fn make_closure(envt: &Arc<Env>, list: Arc<List>) -> Res {
                 args.push(val.unwrap_symbol()?);
             }
         }
-        x => return MalErr::rarg(format!("expected an argument list: {}", &x)),
+        _ => return rerr("expected an argument list"),
     };
 
     let form = list.pop()?;

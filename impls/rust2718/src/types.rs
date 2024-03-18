@@ -18,7 +18,7 @@ pub use lambda::{Builtin, Function, Lambda, StaticFunc};
 pub use list::List;
 pub use map::Map;
 
-use crate::{error::err, ErrType, MalErr};
+use crate::{error::rerr, MalErr};
 
 #[derive(Clone, Debug)]
 pub enum Val {
@@ -46,7 +46,7 @@ impl Val {
     pub fn unwrap_symbol(&self) -> Result<Arc<str>, MalErr> {
         match self {
             Val::Symbol(s) => Ok(s.clone()),
-            _ => MalErr::rarg("expected a symbol"),
+            _ => rerr("expected a symbol"),
         }
     }
 
@@ -54,14 +54,14 @@ impl Val {
         match self {
             Val::List(list) => Ok(list.clone()),
             Val::Nil => Ok(List::empty()),
-            _ => MalErr::rarg("expected a list"),
+            _ => rerr("expected a list"),
         }
     }
 
     pub fn unwrap_func(&self) -> Result<Arc<dyn Lambda>, MalErr> {
         match self {
             Val::Func(f) => Ok(f.clone()),
-            _ => MalErr::rarg("expected a function"),
+            _ => rerr("expected a function"),
         }
     }
 }
@@ -78,9 +78,9 @@ impl Display for Val {
             Float(x) => write!(f, "{}", &x),
             String(ref s) => write!(f, "\"{}\"", s),
             Symbol(ref s) => write!(f, "{}", s),
-            List(a) => write_list(&a, f),
-            Vector(a) => write_vector(&a, f),
-            Map(a) => write_map(&a, f),
+            List(a) => write_list(a, f),
+            Vector(a) => write_vector(a, f),
+            Map(a) => write_map(a, f),
             Func(fun) => write!(f, "{}", fun),
         }
     }
@@ -108,7 +108,7 @@ fn write_vector(v: &Arc<RwLock<Vec<Val>>>, f: &mut Formatter<'_>) -> std::fmt::R
     if let Some(val) = val_iter.next() {
         write!(f, "{}", val)?;
     }
-    while let Some(val) = val_iter.next() {
+    for val in val_iter {
         write!(f, " {}", val)?;
     }
     write!(f, "]")
@@ -120,7 +120,7 @@ fn write_map(m: &Arc<Map>, f: &mut Formatter<'_>) -> std::fmt::Result {
     if let Some((k, v)) = val_iter.next() {
         write!(f, "{} {}", k, v)?;
     }
-    while let Some((k, v)) = val_iter.next() {
+    for (k, v) in val_iter {
         write!(f, " {} {}", k, v)?;
     }
     write!(f, "}}")
@@ -203,17 +203,14 @@ impl TryFrom<Val> for f64 {
         match v {
             Val::Int(n) => Ok(n as f64),
             Val::Float(x) => Ok(x.into()),
-            v => Err(err(
-                ErrType::Type,
-                format!("{} cannot be converted to floating-point", v),
-            )),
+            _ => rerr("value cannot be converted to floating-point"),
         }
     }
 }
 
 impl PartialEq for Val {
     fn eq(&self, other: &Self) -> bool {
-        let b = match (self, other) {
+        match (self, other) {
             (Val::Nil, Val::Nil) => true,
             (Val::True, Val::True) => true,
             (Val::False, Val::False) => true,
@@ -225,7 +222,6 @@ impl PartialEq for Val {
             (Val::Vector(u), Val::Vector(v)) => *u.read().unwrap() == *v.read().unwrap(),
             (Val::Map(m), Val::Map(n)) => m == n,
             _ => false,
-        };
-        b.into()
+        }
     }
 }
