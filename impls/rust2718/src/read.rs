@@ -192,6 +192,13 @@ fn read_atom(obj: String) -> Result<Val, MalErr> {
     if let Some(s) = make_string(obj.as_str())? {
         let s: Arc<str> = s.into();
         Ok(Val::String(s))
+    } else if matches!(obj.as_bytes().first(), Some(&b':')) {
+        // Safety: We already know the first byte of this is an ASCII
+        // character, so slicing from directly after that until the end
+        // should be both in bounds and UTF-8.
+        let word = unsafe { obj.get_unchecked(1..) };
+        let a: Arc<str> = word.into();
+        Ok(Val::Keyword(a))
     } else {
         Ok(Val::Symbol(obj.into()))
     }

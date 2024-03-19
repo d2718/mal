@@ -20,6 +20,10 @@ step4_if_fn_do: Cargo.toml src/* src/*/*.rs src/bin/step4_if_fn_do.rs
 	cargo build --bin step4_if_fn_do
 	cp target/debug/step4_if_fn_do ./
 	
+step5_tco: Cargo.toml src/*.rs src/*/*.rs src/bin/step5_tco.rs
+	cargo build --bin step5_tco
+	cp target/debug/step5_tco ./
+	
 tidy:
 	rm step[0-9]_*
 	

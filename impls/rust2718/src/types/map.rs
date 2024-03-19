@@ -26,7 +26,7 @@ impl From<&Key> for Val {
         match k {
             Key::Int(i) => Val::Int(*i),
             Key::Float(x) => Val::Float(*x),
-            Key::Keyword(a) => Val::String(a.clone()),
+            Key::Keyword(a) => Val::Keyword(a.clone()),
             Key::String(a) => Val::String(a.clone()),
             Key::Symbol(a) => Val::Symbol(a.clone()),
         }
@@ -42,6 +42,7 @@ impl TryFrom<Val> for Key {
             Val::Float(x) => Key::Float(x),
             Val::String(a) => Key::String(a.clone()),
             Val::Symbol(a) => Key::Symbol(a.clone()),
+            Val::Keyword(a) => Key::Keyword(a.clone()),
             _ => return rerr("invalid Map key"),
         };
         Ok(key)

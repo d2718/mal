@@ -29,6 +29,7 @@ pub enum Val {
     Float(OrderedFloat<f64>),
     String(Arc<str>),
     Symbol(Arc<str>),
+    Keyword(Arc<str>),
     List(Arc<List>),
     Vector(Arc<RwLock<Vec<Val>>>),
     Map(Arc<Map>),
@@ -78,6 +79,7 @@ impl Display for Val {
             Float(x) => write!(f, "{}", &x),
             String(ref s) => write!(f, "\"{}\"", s),
             Symbol(ref s) => write!(f, "{}", s),
+            Keyword(ref s) => write!(f, ":{}", s),
             List(a) => write_list(a, f),
             Vector(a) => write_vector(a, f),
             Map(a) => write_map(a, f),
@@ -118,9 +120,11 @@ fn write_map(m: &Arc<Map>, f: &mut Formatter<'_>) -> std::fmt::Result {
     write!(f, "{{")?;
     let mut val_iter = m.iter();
     if let Some((k, v)) = val_iter.next() {
+        let k: Val = k.into();
         write!(f, "{} {}", k, v)?;
     }
     for (k, v) in val_iter {
+        let k: Val = k.into();
         write!(f, " {} {}", k, v)?;
     }
     write!(f, "}}")
@@ -218,6 +222,7 @@ impl PartialEq for Val {
             (Val::Float(x), Val::Float(y)) => x == y,
             (Val::String(s), Val::String(t)) => s == t,
             (Val::Symbol(s), Val::Symbol(t)) => s == t,
+            (Val::Keyword(s), Val::Keyword(t)) => s == t,
             (Val::List(a), Val::List(b)) => a == b,
             (Val::Vector(u), Val::Vector(v)) => *u.read().unwrap() == *v.read().unwrap(),
             (Val::Map(m), Val::Map(n)) => m == n,
